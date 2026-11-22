@@ -1,5 +1,5 @@
 // Tempo service worker: makes the app open instantly and work offline (showing the last data it saw).
-const CACHE = 'tempo-v2';
+const CACHE = 'tempo-v3';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
@@ -15,7 +15,8 @@ self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || url.origin !== location.origin) return; // never cache calls to the brain
   // Network first so updates show up, cache as a fallback when offline.
   e.respondWith(
-    fetch(e.request).then((res) => {
+    // 'no-cache' makes the phone ask GitHub for the newest file every time it's online.
+    fetch(e.request.url, { cache: 'no-cache' }).then((res) => {
       const copy = res.clone();
       caches.open(CACHE).then((c) => c.put(e.request, copy));
       return res;
