@@ -38,22 +38,22 @@ function setup() {
   if (!props.getProperty('ANTHROPIC_API_KEY')) {
     Logger.log('⚠️  Almost there: add your Claude API key. Project Settings (gear icon) → Script Properties → Add property → name ANTHROPIC_API_KEY, value = your key.');
   }
-  Logger.log('✅ Setup done. Next: Deploy → New deployment, then run "connectionCode".');
+  Logger.log('✅ Setup done. Next: Deploy → New deployment, then run "showAppKey".');
 }
 
 /**
- * Run this AFTER you deploy. It prints the code you paste into the app.
+ * Run this AFTER you deploy. It prints the app key you paste into
+ * Tempo → Settings → App key. (The web app URL comes from
+ * Deploy → Manage deployments; it ends in /exec.)
  */
-function connectionCode() {
-  var url = ScriptApp.getService().getUrl();
-  if (!url) {
-    Logger.log('❌ Deploy first: Deploy → New deployment → Web app.');
-    return;
-  }
-  var code = Utilities.base64Encode(JSON.stringify({ url: url, key: secret_() }));
-  Logger.log('Copy everything on the next line and paste it into Tempo → Settings → Connection code:');
-  Logger.log(code);
+function showAppKey() {
+  Logger.log('Your app key (copy just the letters and numbers on the next line):');
+  Logger.log(secret_());
+  Logger.log('Your web app URL is in Deploy → Manage deployments → Web app → URL. Use the one ending in /exec.');
 }
+
+/** Older name, kept so the old setup steps still work. */
+function connectionCode() { showAppKey(); }
 
 /* ═════════════════════════ Web entry points ═════════════════════════ */
 
@@ -65,7 +65,7 @@ function doPost(e) {
   try {
     var body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     if (!body.key || body.key !== secret_()) {
-      return json_({ ok: false, error: 'Wrong app key. Paste your connection code again in Settings.' });
+      return json_({ ok: false, error: 'Wrong app key. Check the App key in Tempo → Settings.' });
     }
     var action = body.action || 'ask';
     switch (action) {

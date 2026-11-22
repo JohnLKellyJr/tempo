@@ -41,18 +41,18 @@ There are four parts:
    - Execute as: **Me**
    - Who has access: **Anyone**
    - Click **Deploy**. (If it asks for permission again, allow it.)
-9. Back in the editor, change the dropdown next to **Run** to `connectionCode` and click **Run**.
-10. At the bottom, copy the long line of letters and numbers under "Copy everything on the next line". This is your **connection code**. Treat it like a password.
+9. The deploy box now shows a **Web app URL** ending in `/exec`. Click **Copy** and paste it into a note. (Ignore any URL ending in `/dev`: it only works on your computer.) You can always find it again under **Deploy → Manage deployments**.
+10. Back in the editor, change the dropdown next to **Run** to `showAppKey` and click **Run**. At the bottom, copy just the long line of letters and numbers. This is your **app key**. Paste it into the same note. Treat it like a password.
 
-> "Anyone" sounds scary, but nobody can use your brain without the connection code. The code is a long random key that only you have.
+> "Anyone" sounds scary, but nobody can use your brain without the app key, a long random code that only you have.
 
 ## Part 3: Open the app on your iPhone (5 min)
 
-1. Send yourself the connection code (for example, in Notes, which syncs to your iPhone).
+1. Make sure the note with your web app URL and app key is on your iPhone (Apple Notes syncs automatically).
 2. On your iPhone, open **Safari** and go to **https://johnlkellyjr.github.io/tempo/**
 3. Tap the **Share** button (square with an arrow), scroll down, and tap **Add to Home Screen**, then **Add**.
 4. Open **Tempo** from your home screen.
-5. Tap the **gear** (top right). Type your name, paste the connection code, and tap **Save & connect**.
+5. Tap the **gear** (top right). Type your name, paste the **Web app URL** and the **App key** into their boxes, and tap **Save & connect**. If it can't connect, the message under the boxes says what to fix.
 
 You should see your real calendar. Try tapping the mic and saying: *"Add study for bio exam Thursday from 7 to 9 pm."*
 
@@ -80,7 +80,7 @@ This lets you talk to Tempo straight from your home screen without opening the a
 
 You can also say **"Hey Siri, Ask Tempo"**.
 
-> **Where's my app key and web app URL?** Both are inside the connection code. In Apps Script, the URL is under **Deploy → Manage deployments**. The key is in **Project Settings → Script Properties → APP_SECRET**.
+> **Where's my app key and web app URL?** The same ones from your note. In Apps Script, the URL is under **Deploy → Manage deployments**, and running `showAppKey` prints the key again.
 
 ## On your Mac
 
@@ -101,7 +101,9 @@ Tempo will now show your school events too (it can read them but not change them
 
 | What you see | What to do |
 |---|---|
-| "Wrong app key" | Paste the connection code again in Settings. |
+| "Wrong app key" | Run `showAppKey` in Apps Script and paste the key again in Settings. |
+| "Google sent back a sign-in page" | **Deploy → Manage deployments → ✏️ Edit**: set **Who has access** to **Anyone** (not "Anyone with Google account"), then **Deploy**. |
+| "That URL ends in /dev" | Copy the URL ending in `/exec` from **Deploy → Manage deployments**. |
 | "Add your Claude API key…" | Part 2, step 5: check `ANTHROPIC_API_KEY` is spelled exactly like that. |
 | "Your Claude account is out of credit" | Add credit at console.anthropic.com → Billing. |
 | You changed `Code.gs` and nothing changed in the app | Apps Script needs a new version: **Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy**. |

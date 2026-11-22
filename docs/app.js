@@ -84,15 +84,25 @@
   // ───────────── Backend ─────────────
   async function api(action, payload = {}) {
     if (!isConnected()) throw new Error('Not connected');
-    const res = await fetch(state.conn.url, {
+    let res;
+    try {
+      res = await fetch(state.conn.url, {
       method: 'POST',
       // text/plain avoids a CORS pre-flight, which Apps Script does not answer.
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(Object.assign({ key: state.conn.key, action }, payload)),
       redirect: 'follow'
-    });
-    if (!res.ok) throw new Error(`Server error (${res.status})`);
-    const json = await res.json();
+      });
+    } catch (e) {
+      throw new Error('Couldn’t reach your Tempo brain. Check you’re online and that the web app URL is the one ending in /exec (not /dev).');
+    }
+    if (!res.ok) throw new Error(`Server error (${res.status}). Check the web app URL ends in /exec.`);
+    const raw = await res.text();
+    let json;
+    try { json = JSON.parse(raw); }
+    catch (e) {
+      throw new Error('Google sent back a sign-in page instead of Tempo. In Apps Script, open Deploy → Manage deployments and make sure "Who has access" is "Anyone", and that you copied the URL ending in /exec.');
+    }
     if (!json.ok) throw new Error(json.error || 'Something went wrong');
     if (json.events && json.todos) {
       state.data = { events: json.events, todos: json.todos, now: json.now };
@@ -427,7 +437,8 @@
 
   function openSettings() {
     $('#sName').value = state.name;
-    $('#sCode').value = '';
+    $('#sUrl').value = (state.conn && state.conn.url) || '';
+    $('#sKey').value = (state.conn && state.conn.key) || '';
     const s = $('#sStatus');
     s.className = 'status' + (isConnected() ? ' ok' : '');
     s.textContent = isConnected() ? 'Connected to your Tempo brain.' : 'Not connected. Showing sample data.';
@@ -435,11 +446,27 @@
     openSheet('settings');
   }
 
-  function decodeCode(code) {
-    code = code.trim();
-    if (!code) return null;
-    try { const o = JSON.parse(atob(code.replace(/\s+/g, ''))); if (o.url && o.key) return o; } catch (e) { /* fall through */ }
-    throw new Error('That code doesn’t look right. Copy the whole line from Apps Script.');
+  // Accepts the web app URL + app key, or an old-style connection code pasted anywhere.
+  function readConnection() {
+    const urlText = $('#sUrl').value.trim();
+    const keyText = $('#sKey').value.trim();
+    const blob = urlText + ' ' + keyText;
+    const code = (blob.match(/eyJ[A-Za-z0-9+/=_-]{20,}/) || [])[0];
+    if (code) {
+      try { const o = JSON.parse(atob(code.replace(/-/g, '+').replace(/_/g, '/'))); if (o.url && o.key) return check({ url: o.url, key: o.key }); } catch (e) { /* fall through */ }
+    }
+    if (!urlText && !keyText) return null;
+    const url = (urlText.match(/https:\/\/script\.google(usercontent)?\.com\/[^\s"'<>]+/) || [])[0];
+    if (!url) throw new Error('Paste the web app URL. It starts with https://script.google.com/macros/s/ and ends in /exec.');
+    const key = (keyText.match(/[A-Za-z0-9]{16,}/) || [])[0];
+    if (!key) throw new Error('Paste the app key. In Apps Script, run showAppKey and copy the long code it prints.');
+    return check({ url, key });
+  }
+  function check(conn) {
+    conn.url = conn.url.replace(/[).,;]+$/, '');
+    if (/\/dev(\?|$)/.test(conn.url)) throw new Error('That URL ends in /dev, which only works on your computer. Use the one ending in /exec: Apps Script → Deploy → Manage deployments → copy the Web app URL.');
+    if (!/\/exec(\?|$)/.test(conn.url)) throw new Error('The web app URL should end in /exec. Copy it from Apps Script → Deploy → Manage deployments.');
+    return conn;
   }
 
   async function saveSettings(ev) {
@@ -447,7 +474,7 @@
     state.name = $('#sName').value.trim(); store.set('name', state.name);
     const s = $('#sStatus');
     let conn = null;
-    try { conn = decodeCode($('#sCode').value); } catch (e) { s.className = 'status err'; s.textContent = e.message; return; }
+    try { conn = readConnection(); } catch (e) { s.className = 'status err'; s.textContent = e.message; return; }
     if (conn) {
       s.className = 'status'; s.textContent = 'Connecting…';
       const prev = state.conn; state.conn = conn;
@@ -526,7 +553,7 @@
     const code = hash.get('connect');
     if (code) {
       history.replaceState(null, '', location.pathname);
-      openSettings(); $('#sCode').value = code;
+      openSettings(); $('#sUrl').value = code;
     }
     const q = params.get('q');
     if (q) { history.replaceState(null, '', location.pathname); setTimeout(() => ask(q), 300); }
