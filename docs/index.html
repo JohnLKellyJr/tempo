@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+  <title>Tempo</title>
+  <meta name="description" content="Your calendar and to-do assistant.">
+  <meta name="theme-color" content="#0b0b12" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f6f3ee" media="(prefers-color-scheme: light)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Tempo">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
+
+  <main class="app">
+    <header class="top">
+      <div>
+        <p class="eyebrow" id="dateLine">—</p>
+        <h1 class="greeting" id="greeting">Hello</h1>
+      </div>
+      <button class="icon-btn" id="openSettings" aria-label="Settings">
+        <svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 8.9 4.6 1.7 1.7 0 0 0 9.97 3.04V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.51 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9c.26.6.85 1 1.51 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg>
+      </button>
+    </header>
+
+    <div class="demo-banner" id="demoBanner" hidden>
+      <span class="dot"></span>
+      <span>Preview with sample data.</span>
+      <button class="link" id="demoConnect">Connect</button>
+    </div>
+
+    <p class="summary" id="summary"></p>
+
+    <nav class="segmented" role="tablist">
+      <button role="tab" class="seg active" data-view="today" aria-selected="true">Today</button>
+      <button role="tab" class="seg" data-view="tasks" aria-selected="false">Tasks</button>
+      <span class="seg-thumb" aria-hidden="true"></span>
+    </nav>
+
+    <section class="view" id="view-today">
+      <article class="hero card" id="upNext"></article>
+
+      <div class="section-head">
+        <h2>Focus</h2>
+        <button class="link" data-goto="tasks">All tasks</button>
+      </div>
+      <ul class="task-list" id="focusList"></ul>
+
+      <div class="section-head"><h2 id="scheduleTitle">Schedule</h2></div>
+      <ol class="timeline" id="timeline"></ol>
+
+      <div class="section-head"><h2>Coming up</h2></div>
+      <ol class="upcoming" id="upcoming"></ol>
+    </section>
+
+    <section class="view" id="view-tasks" hidden>
+      <form class="quick-add card" id="quickAdd" autocomplete="off">
+        <span class="check ghost" aria-hidden="true"></span>
+        <input id="quickAddInput" placeholder="Add a task" enterkeyhint="done" aria-label="New task">
+        <button type="submit" class="pill-btn" aria-label="Add task">Add</button>
+      </form>
+      <div id="taskGroups"></div>
+    </section>
+
+    <div class="dock-spacer"></div>
+  </main>
+
+  <!-- Reply card -->
+  <aside class="reply card" id="reply" hidden aria-live="polite">
+    <div class="reply-head">
+      <span class="spark" aria-hidden="true"></span>
+      <span class="reply-label">Tempo</span>
+      <button class="icon-btn small" id="openChat" aria-label="Show conversation">
+        <svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4V5Z"/></svg>
+      </button>
+      <button class="icon-btn small" id="closeReply" aria-label="Dismiss">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <p class="reply-text" id="replyText"></p>
+    <div class="chips" id="replyChips"></div>
+  </aside>
+
+  <!-- Composer -->
+  <form class="dock" id="composer" autocomplete="off">
+    <div class="dock-inner">
+      <textarea id="prompt" rows="1" placeholder="Ask Tempo to plan something…" enterkeyhint="send" aria-label="Message Tempo"></textarea>
+      <button type="button" class="mic" id="mic" aria-label="Speak">
+        <span class="mic-glow" aria-hidden="true"></span>
+        <svg viewBox="0 0 24 24" class="i-mic"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+        <svg viewBox="0 0 24 24" class="i-send"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg>
+        <span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      </button>
+    </div>
+    <p class="dock-hint" id="dockHint"></p>
+  </form>
+
+  <!-- Conversation sheet -->
+  <div class="sheet-backdrop" id="chatBackdrop" hidden></div>
+  <section class="sheet" id="chatSheet" hidden aria-label="Conversation">
+    <div class="grabber"></div>
+    <div class="sheet-head">
+      <h2>Conversation</h2>
+      <button class="link" id="clearChat">Clear</button>
+    </div>
+    <div class="chat" id="chatLog"></div>
+  </section>
+
+  <!-- Task editor sheet -->
+  <div class="sheet-backdrop" id="taskBackdrop" hidden></div>
+  <section class="sheet" id="taskSheet" hidden aria-label="Edit task">
+    <div class="grabber"></div>
+    <form id="taskForm" class="form">
+      <input id="tTitle" class="title-input" aria-label="Task title" required>
+      <label class="field"><span>Due</span><input type="date" id="tDue"></label>
+      <div class="field"><span>Priority</span>
+        <div class="choice" id="tPriority">
+          <button type="button" data-v="low">Low</button>
+          <button type="button" data-v="normal">Normal</button>
+          <button type="button" data-v="high">High</button>
+        </div>
+      </div>
+      <label class="field"><span>Minutes</span><input type="number" id="tMinutes" min="0" step="5" inputmode="numeric" placeholder="—"></label>
+      <label class="field stack"><span>Notes</span><textarea id="tNotes" rows="3" placeholder="Add notes"></textarea></label>
+      <button type="button" class="ghost-btn" id="tBreak">
+        <span class="spark" aria-hidden="true"></span> Break into steps
+      </button>
+      <div class="row-btns">
+        <button type="button" class="danger-btn" id="tDelete">Delete</button>
+        <button type="submit" class="primary-btn">Save</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- Settings sheet -->
+  <div class="sheet-backdrop" id="settingsBackdrop" hidden></div>
+  <section class="sheet" id="settingsSheet" hidden aria-label="Settings">
+    <div class="grabber"></div>
+    <div class="sheet-head"><h2>Settings</h2></div>
+    <form id="settingsForm" class="form">
+      <label class="field stack"><span>Your name</span><input id="sName" placeholder="Chris" autocomplete="given-name"></label>
+      <label class="field stack"><span>Connection code</span>
+        <textarea id="sCode" rows="3" placeholder="Paste the code from Apps Script (connectionCode)" spellcheck="false"></textarea>
+      </label>
+      <p class="status" id="sStatus"></p>
+      <div class="row-btns">
+        <button type="button" class="ghost-btn" id="sDisconnect">Use sample data</button>
+        <button type="submit" class="primary-btn">Save &amp; connect</button>
+      </div>
+      <p class="fine">Tempo talks only to your own Google Apps Script. Your connection code stays on this device.</p>
+    </form>
+  </section>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
