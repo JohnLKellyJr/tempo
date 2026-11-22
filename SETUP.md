@@ -82,6 +82,19 @@ You can also say **"Hey Siri, Ask Tempo"**.
 
 > **Where's my app key and web app URL?** The same ones from your note. In Apps Script, the URL is under **Deploy → Manage deployments**, and running `showAppKey` prints the key again.
 
+## Part 5: The Tempo calendar widget (5 min, optional)
+
+A square or wide widget that looks like the Google Calendar one: today's date, your next events and your to-dos. Tapping it starts **Ask Tempo** so you can talk straight away.
+
+1. Install **Scriptable** from the App Store (free).
+2. On your iPhone, open [the widget script](https://raw.githubusercontent.com/JohnLKellyJr/tempo/main/widget/Tempo%20Widget.js) in Safari. Press and hold on the text, tap **Select All**, then **Copy**.
+3. Open **Scriptable**, tap **+** (top right), and paste. Tap the title at the top and name it **Tempo Widget**. Tap **Done**.
+4. Tap the **Tempo Widget** tile to run it once. Paste your **Web app URL** and **App key** when it asks, and tap **Save**. You'll see a preview.
+5. Go to your home screen, long-press an empty spot, tap **Edit → Add Widget**, search **Scriptable**, choose the **small** (square) or **medium** (wide) size, and tap **Add Widget**.
+6. While the icons are still jiggling, tap the new widget. Set **Script** to **Tempo Widget** and **When Interacting** to **Open URL**. Tap outside to finish.
+
+The widget refreshes about every 15 minutes (iPhone decides the exact timing). Tapping it runs the **Ask Tempo** shortcut from Part 4, so make sure that shortcut has exactly that name. If you'd rather a tap open the Tempo app, type `app` in the widget's **Parameter** box.
+
 ## On your Mac
 
 - Open the same address in Safari, then choose **File → Add to Dock**. Tempo opens as its own app.
