@@ -109,4 +109,4 @@ Tempo will now show your school events too (it can read them but not change them
 
 ## Changing which Claude model it uses
 
-Tempo uses **Claude Opus 5.5** by default. To use the much cheaper **Claude Haiku 5.5**, add a Script Property `MODEL` with value `claude-haiku-5-5`. No redeploy is needed.
+Tempo uses **Claude Haiku 5.5** by default, which is fast and costs well under $1 a month for normal use. If it struggles with complicated requests, switch to the smarter **Claude Opus 5.5** by adding a Script Property `MODEL` with value `claude-opus-5-5` (roughly $15 to $25 a month). No redeploy is needed.

@@ -10,9 +10,10 @@
  */
 
 // ───────────────────────────── SETTINGS ─────────────────────────────
-// Which Claude model to use. claude-opus-5-5 is the most capable.
-// claude-haiku-5-5 is much cheaper and still good at this job.
-var DEFAULT_MODEL = 'claude-opus-5-5';
+// Which Claude model to use. claude-haiku-5-5 is fast and very cheap.
+// For harder planning, switch to claude-opus-5-5 (smarter, costs more):
+// add a Script Property MODEL = claude-opus-5-5. No redeploy needed.
+var DEFAULT_MODEL = 'claude-haiku-5-5';
 // ────────────────────────────────────────────────────────────────────
 
 var API_URL = 'https://api.anthropic.com/v1/messages';
