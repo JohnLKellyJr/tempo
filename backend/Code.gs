@@ -95,15 +95,34 @@ function doPost(e) {
 /** Everything the Today screen needs, in one response. */
 function snapshot_() {
   var now = new Date();
-  var start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  var end = new Date(start.getTime() + 7 * 86400000);
   return {
     ok: true,
     timezone: tz_(),
     now: fmt_(now),
-    events: listEvents_(start, end),
+    events: weekEvents_(),
     todos: listTodos_(true)
   };
+}
+
+/**
+ * Today + the next 7 days of events. Reading every calendar is the slowest
+ * thing Tempo does, so the result is kept for EVENT_CACHE_SECONDS and
+ * thrown away whenever Tempo itself changes an event.
+ */
+var EVENT_CACHE_SECONDS = 90;
+function weekEvents_() {
+  var now = new Date();
+  var key = 'week:' + Utilities.formatDate(now, tz_(), 'yyyy-MM-dd');
+  var cache = CacheService.getScriptCache();
+  var hit = cache.get(key);
+  if (hit) { try { return JSON.parse(hit); } catch (ignore) {} }
+  var start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  var events = listEvents_(start, new Date(start.getTime() + 8 * 86400000));
+  try { cache.put(key, JSON.stringify(events), EVENT_CACHE_SECONDS); } catch (ignore) {}
+  return events;
+}
+function clearEventCache_() {
+  CacheService.getScriptCache().remove('week:' + Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd'));
 }
 
 /* ═════════════════════════ Talking to Claude ═════════════════════════ */
@@ -122,7 +141,12 @@ function ask_(text, history) {
   while (messages.length && messages[0].role !== 'user') messages.shift();
   messages = alternate_(messages);
   if (messages.length && messages[messages.length - 1].role === 'user') messages.pop();
-  messages.push({ role: 'user', content: text });
+  // Hand Claude the week and the to-do list up front, so it rarely needs
+  // a separate "look it up" round trip (each one adds a second or two).
+  messages.push({ role: 'user', content: [
+    { type: 'text', text: contextFor_() },
+    { type: 'text', text: text }
+  ] });
 
   var changes = [];
   var reply = '';
@@ -149,6 +173,7 @@ function ask_(text, history) {
     messages.push({ role: 'user', content: results });
   }
 
+  if (changes.some(function (c) { return c.type === 'event'; })) clearEventCache_();
   var snap = snapshot_();
   snap.reply = reply || 'Done.';
   snap.changes = changes;
@@ -197,6 +222,19 @@ function callClaude_(messages) {
   }
 }
 
+function contextFor_() {
+  var lines = ['<his_calendar next_8_days>'];
+  weekEvents_().forEach(function (e) {
+    lines.push([e.start.replace('T', ' ') + (e.all_day ? ' (all day)' : '–' + e.end.slice(11)), e.title, e.calendar + (e.editable ? '' : ' (read-only)'), 'id=' + e.id].join(' | '));
+  });
+  lines.push('</his_calendar>', '<his_open_todos>');
+  listTodos_(false).forEach(function (t) {
+    lines.push([t.title, t.due ? 'due ' + t.due : 'no due date', t.priority, t.parent ? 'step of ' + t.parent : '', 'id=' + t.id].filter(String).join(' | '));
+  });
+  lines.push('</his_open_todos>');
+  return lines.join('\n');
+}
+
 function systemPrompt_() {
   var now = new Date();
   return [
@@ -208,6 +246,7 @@ function systemPrompt_() {
     '- Keep his to-do list: add tasks, set due dates and priorities, mark them done, and split a big task into smaller steps (sub-tasks use parent_id).',
     '',
     'How to work:',
+    '- His calendar for the next 8 days and his open to-dos come with each message. Use them directly; only call list_events or list_todos for other dates or finished tasks.',
     '- When he asks to schedule something, check the calendar for that time first and avoid clashes. If there is a clash, pick the nearest free slot and tell him.',
     '- If he gives no time, choose a sensible one (study blocks in the afternoon or evening, not before 8am or after 11pm) and say what you chose.',
     '- Default event length is 1 hour unless he says otherwise or it is obviously different.',
@@ -333,16 +372,19 @@ function runTool_(name, input, changes) {
       return listEvents_(parseLocal_(input.start), parseLocal_(input.end));
     case 'create_event': {
       var ev = createEvent_(input);
+      clearEventCache_();
       changes.push({ type: 'event', verb: 'added', title: ev.title, when: ev.when });
       return ev;
     }
     case 'update_event': {
       var up = updateEvent_(input);
+      clearEventCache_();
       changes.push({ type: 'event', verb: 'moved', title: up.title, when: up.when });
       return up;
     }
     case 'delete_event': {
       var gone = deleteEvent_(input.event_id);
+      clearEventCache_();
       changes.push({ type: 'event', verb: 'removed', title: gone.title });
       return { deleted: true };
     }
@@ -451,7 +493,9 @@ function describe_(ev) {
 
 /* ═════════════════════════ To-do list (private Google Sheet) ═════════════════════════ */
 
+var SHEET_ = null; // opened once per request
 function todoSheet_() {
+  if (SHEET_) return SHEET_;
   var props = PropertiesService.getScriptProperties();
   var id = props.getProperty('SHEET_ID');
   var ss = null;
@@ -465,7 +509,8 @@ function todoSheet_() {
     sh.setFrozenRows(1);
     sh.getRange('D:D').setNumberFormat('@'); // keep due dates as plain text
   }
-  return ss.getSheetByName('todos');
+  SHEET_ = ss.getSheetByName('todos');
+  return SHEET_;
 }
 
 function readTodos_() {
