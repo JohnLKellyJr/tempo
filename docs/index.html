@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=5">
+  <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
   <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
@@ -50,17 +50,27 @@
     <section class="view" id="view-today">
       <article class="hero card" id="upNext"></article>
 
+      <div class="section-head"><h2>Do this next</h2></div>
+      <article class="card next-step" id="nextStep"></article>
+
       <div class="section-head">
         <h2>Focus</h2>
         <button class="link" data-goto="tasks">All tasks</button>
       </div>
       <ul class="task-list" id="focusList"></ul>
 
-      <div class="section-head"><h2 id="scheduleTitle">Schedule</h2></div>
-      <ol class="timeline" id="timeline"></ol>
+      <div class="section-head"><h2>Break it down</h2></div>
+      <article class="card breaker">
+        <p class="breaker-lead">Stuck on something big? Tempo splits it into tiny steps you can check off.</p>
+        <form class="breaker-form" id="breakForm" autocomplete="off">
+          <input id="breakInput" placeholder="What feels too big?" enterkeyhint="go" aria-label="Task to break down">
+          <button type="submit" class="pill-btn">Break it down</button>
+        </form>
+        <div class="breaker-picks" id="breakPicks"></div>
+      </article>
 
-      <div class="section-head"><h2>Coming up</h2></div>
-      <ol class="upcoming" id="upcoming"></ol>
+      <div class="section-head"><h2>Wins</h2></div>
+      <article class="card wins" id="wins"></article>
     </section>
 
     <section class="view" id="view-tasks" hidden>
@@ -167,12 +177,12 @@
         <button type="button" class="ghost-btn" id="sDisconnect">Use sample data</button>
         <button type="submit" class="primary-btn">Save &amp; connect</button>
       </div>
-      <p class="fine">Tempo talks only to your own Google Apps Script. Your web app URL and app key stay on this device. <span class="ver">Version 5</span></p>
+      <p class="fine">Tempo talks only to your own Google Apps Script. Your web app URL and app key stay on this device. <span class="ver">Version 6</span></p>
     </form>
   </section>
 
   <div class="toast" id="toast" role="status" hidden></div>
 
-  <script src="app.js?v=5"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>

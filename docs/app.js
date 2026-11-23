@@ -67,10 +67,17 @@
         ev('s7', 'Bio midterm', 3, '10:00', '11:30', 'School', '#3b82f6'),
         ev('s8', 'Dinner with family', 4, '18:30', '20:30', 'Personal', '#a78bfa')
       ],
+      wins: { days: { [k(-1)]: 4, [k(-2)]: 2, [k(-3)]: 3, [k(-4)]: 1, [k(-6)]: 2, [k(-7)]: 1 } },
       todos: [
+        { id: 'w1', title: 'Email TA about lab partner', due: k(-1), priority: 'normal', done: true, minutes: 5, parent: '', notes: '', completed: k(-1) + 'T15:10' },
+        { id: 'w2', title: 'Print the reading', due: k(-1), priority: 'normal', done: true, minutes: 5, parent: '', notes: '', completed: k(-1) + 'T18:40' },
+        { id: 'w3', title: 'Laundry', due: '', priority: 'low', done: true, minutes: 20, parent: '', notes: '', completed: k(-2) + 'T20:00' },
+        { id: 'w4', title: 'Submit stats homework', due: k(-3), priority: 'high', done: true, minutes: 45, parent: '', notes: '', completed: k(-3) + 'T21:15' },
         { id: 'a1', title: 'Finish lab report draft', due: k(0), priority: 'high', done: false, minutes: 90, parent: '', notes: '' },
-        { id: 'a2', title: 'Outline intro + methods', due: k(0), priority: 'normal', done: true, minutes: 30, parent: 'a1', notes: '' },
-        { id: 'a3', title: 'Make the two graphs', due: k(0), priority: 'normal', done: false, minutes: 40, parent: 'a1', notes: '' },
+        { id: 'a2', title: 'Outline intro + methods', due: k(0), priority: 'normal', done: true, minutes: 30, parent: 'a1', notes: '', completed: k(0) + 'T08:50' },
+        { id: 'a3', title: 'Open the data sheet and pick the two columns', due: k(0), priority: 'normal', done: false, minutes: 5, parent: 'a1', notes: '' },
+        { id: 'a8', title: 'Make the two graphs', due: k(0), priority: 'normal', done: false, minutes: 20, parent: 'a1', notes: '' },
+        { id: 'a9', title: 'Write the results paragraph', due: k(0), priority: 'normal', done: false, minutes: 15, parent: 'a1', notes: '' },
         { id: 'a4', title: 'Email Prof. Lee about extension', due: k(-1), priority: 'normal', done: false, minutes: 10, parent: '', notes: '' },
         { id: 'a5', title: 'Review chapters 7–9 for Bio', due: k(2), priority: 'high', done: false, minutes: 120, parent: '', notes: '' },
         { id: 'a6', title: 'Pay phone bill', due: k(5), priority: 'low', done: false, minutes: null, parent: '', notes: '', remind: k(5) + 'T09:00' },
@@ -105,7 +112,7 @@
     }
     if (!json.ok) throw new Error(json.error || 'Something went wrong');
     if (json.events && json.todos) {
-      state.data = { events: json.events, todos: json.todos, now: json.now, reminders: json.reminders || null };
+      state.data = { events: json.events, todos: json.todos, now: json.now, reminders: json.reminders || null, wins: json.wins || null };
       store.set('snapshot', state.data);
     }
     return json;
@@ -147,7 +154,6 @@
   function renderToday() {
     const d = data();
     const now = new Date();
-    const today = dayKey(now);
 
     // Up next
     const upcomingTimed = d.events.filter((e) => !e.all_day && parse(e.end) > now).sort((a, b) => a.start.localeCompare(b.start));
@@ -173,38 +179,121 @@
     const focus = open.sort(taskOrder).slice(0, 3);
     $('#focusList').innerHTML = focus.length ? focus.map((t) => taskHTML(t, d.todos)).join('') : `<li class="empty-note">All clear. Nothing urgent.</li>`;
 
-    // Today timeline
-    const todays = d.events.filter((e) => e.start.slice(0, 10) === today).sort((a, b) => a.start.localeCompare(b.start));
-    $('#scheduleTitle').textContent = 'Today';
-    let html = '', nowPlaced = false;
-    todays.forEach((e) => {
-      const s = parse(e.start), en = parse(e.end);
-      if (!nowPlaced && s > now) { html += nowLine(now); nowPlaced = true; }
-      const cls = en <= now ? 'past' : s <= now ? 'now' : '';
-      html += `<li class="ev ${cls}">
-        <div class="ev-time">${e.all_day ? 'All day' : `${timeFmt(s)}<small>${ampm(s)}</small>`}</div>
-        <div class="ev-card" style="--ev-color:${esc(e.color || '')}">
-          <div class="ev-title">${esc(e.title)}</div>
-          <div class="ev-sub">${e.all_day ? '' : `${timeFull(s)} – ${timeFull(en)}`}${e.location ? ' · ' + esc(e.location) : ''}${e.calendar ? ' · ' + esc(e.calendar) : ''}</div>
-        </div></li>`;
-    });
-    if (todays.length && !nowPlaced) html += nowLine(now);
-    $('#timeline').innerHTML = html || `<li class="empty-note">No events today.</li>`;
-
-    // Coming up (next 6 days)
-    const later = d.events.filter((e) => e.start.slice(0, 10) > today).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 6);
-    $('#upcoming').innerHTML = later.length ? later.map((e) => {
-      const s = parse(e.start), en = parse(e.end);
-      return `<li>
-        <div class="day-badge"><span>${WD[s.getDay()]}</span><b>${s.getDate()}</b></div>
-        <div class="up-body"><div class="ev-title">${esc(e.title)}</div>
-          <div class="ev-sub">${e.all_day ? 'All day' : `${timeFull(s)} – ${timeFull(en)}`}${e.location ? ' · ' + esc(e.location) : ''}</div></div>
-        <span class="cal-dot" style="background:${esc(e.color || 'var(--accent)')}"></span>
-      </li>`;
-    }).join('') : `<li class="empty-note">Nothing else this week.</li>`;
+    renderNextStep(d);
+    renderBreaker(d);
+    renderWins(d);
   }
 
-  const nowLine = (now) => `<li class="now-line" aria-label="Now"><span>${timeFull(now).toUpperCase()}</span><span></span></li>`;
+  // ───────────── Do this next: one small step, nothing else ─────────────
+  // Walk the tasks in focus order. A task with steps offers its first
+  // unfinished step; a task without steps offers itself.
+  const skipped = new Set();
+  function nextCandidates(d) {
+    const out = [];
+    topLevel(d.todos.filter((t) => !t.done)).sort(taskOrder).forEach((t) => {
+      const subs = d.todos.filter((s) => s.parent === t.id);
+      const openSubs = subs.filter((s) => !s.done);
+      if (openSubs.length) out.push({ todo: openSubs[0], parent: t, n: subs.length - openSubs.length + 1, of: subs.length });
+      else out.push({ todo: t, parent: null, allSteps: subs.length });
+    });
+    return out;
+  }
+  function renderNextStep(d) {
+    const box = $('#nextStep');
+    const all = nextCandidates(d);
+    let list = all.filter((c) => !skipped.has(c.todo.id));
+    if (!list.length && all.length) { skipped.clear(); list = all; }
+    const c = list[0];
+    if (!c) {
+      box.className = 'card next-step empty';
+      box.innerHTML = `<h3>Nothing waiting on you.</h3><p class="ns-sub">Enjoy it, or tell Tempo what’s next.</p>`;
+      return;
+    }
+    const t = c.todo;
+    const sub = c.parent
+      ? `Step ${c.n} of ${c.of} · ${esc(c.parent.title)}`
+      : c.allSteps ? 'All the steps are done. Finish it off.' : t.minutes ? `About ${minText(t.minutes)}` : '';
+    const big = !c.parent && !c.allSteps && (t.minutes ? t.minutes >= 30 : t.priority === 'high');
+    box.className = 'card next-step';
+    box.dataset.id = t.id;
+    box.innerHTML = `
+      <h3>${esc(t.title)}</h3>
+      ${sub ? `<p class="ns-sub">${sub}</p>` : ''}
+      ${big ? '<p class="ns-hint">Feels like a lot? Break it into tiny steps first.</p>' : ''}
+      <div class="ns-btns">
+        <button class="ns-done" data-ns="done">${CHECK_SVG}<span>Done</span></button>
+        ${big ? '<button class="ns-alt" data-ns="break"><span class="spark" aria-hidden="true"></span>Break it down</button>' : ''}
+        ${list.length > 1 ? '<button class="ns-skip" data-ns="skip">Not now</button>' : ''}
+      </div>`;
+  }
+  const minText = (m) => (m < 60 ? `${m} min` : `${(m / 60).toFixed(m % 60 ? 1 : 0)} hr`);
+
+  // ───────────── Break it down ─────────────
+  function renderBreaker(d) {
+    // Suggest big open tasks that don't have steps yet.
+    const picks = topLevel(d.todos.filter((t) => !t.done))
+      .filter((t) => !d.todos.some((s) => s.parent === t.id) && (t.minutes ? t.minutes >= 45 : t.priority === 'high'))
+      .sort(taskOrder).slice(0, 3);
+    $('#breakPicks').innerHTML = picks.length
+      ? `<p class="picks-label">Or pick one of these</p>` + picks.map((t) =>
+        `<button class="pick" data-break="${esc(t.id)}"><span class="spark" aria-hidden="true"></span><span class="pick-title">${esc(t.title)}</span>${t.minutes ? `<span class="pick-meta">${minText(t.minutes)}</span>` : ''}</button>`).join('')
+      : '';
+  }
+  function breakDown(t) {
+    if (!t) return;
+    ask(`Break "${t.title}" into small steps and add them as sub-tasks.`);
+  }
+  function breakNew(title) {
+    ask(`I need to: ${title}. Add it as a task and break it into small steps as sub-tasks.`);
+  }
+
+  // ───────────── Wins: real counts of what got checked off ─────────────
+  // Every finished task or step is one win. Today is counted from the task
+  // list on this device, so a check-off shows up instantly. Earlier days come
+  // from the brain's history (wins.days), or from the past week's finished
+  // tasks if the brain hasn't been updated yet.
+  function winsByDay(d) {
+    const local = {};
+    d.todos.forEach((t) => {
+      if (!t.done || !t.completed) return;
+      const k = t.completed.slice(0, 10);
+      local[k] = (local[k] || 0) + 1;
+    });
+    if (!(d.wins && d.wins.days)) return local;
+    const today = dayKey(new Date());
+    const days = Object.assign({}, d.wins.days);
+    days[today] = local[today] || 0;
+    return days;
+  }
+  function renderWins(d) {
+    const days = winsByDay(d);
+    const now = new Date(), today = dayKey(now);
+    const todayCount = days[today] || 0;
+    // The last 7 days, ending today (a rolling week, so Mondays don't reset to 0).
+    const week = [6, 5, 4, 3, 2, 1, 0].map((i) => { const day = addDays(now, -i); const k = dayKey(day); return { k, n: days[k] || 0, label: WD[day.getDay()][0] }; });
+    const weekCount = week.reduce((a, w) => a + w.n, 0);
+    // Streak: days in a row with at least one win. Today still counts as
+    // "in progress", so the streak doesn't drop to 0 first thing in the morning.
+    let streak = 0, day = todayCount ? now : addDays(now, -1);
+    while (days[dayKey(day)]) { streak++; day = addDays(day, -1); }
+    const recent = d.todos.filter((t) => t.done && t.completed && t.completed.slice(0, 10) === today)
+      .sort((a, b) => b.completed.localeCompare(a.completed)).slice(0, 3);
+    const line = todayCount === 0
+      ? (streak ? `Your ${streak}-day streak is waiting. One small step keeps it going.` : 'Your first win today is one tap away.')
+      : todayCount < 3 ? 'Nice start. Small steps count too.' : todayCount < 6 ? 'You’re on a roll.' : 'Huge day. Be proud of this.';
+    $('#wins').innerHTML = `
+      <div class="win-stats">
+        <div class="stat"><b>${todayCount}</b><span>today</span></div>
+        <div class="stat"><b>${weekCount}</b><span>last 7 days</span></div>
+        <div class="stat"><b>${streak}</b><span>day streak</span></div>
+      </div>
+      <div class="win-week" aria-label="Days with wins this week">
+        ${week.map((w) => `<div class="wd ${w.n ? 'on' : ''} ${w.k === today ? 'today' : ''}"><i>${w.n ? CHECK_SVG : ''}</i><span>${w.label}</span></div>`).join('')}
+      </div>
+      <p class="win-line">${line}</p>
+      ${recent.length ? `<ul class="win-recent">${recent.map((t) => `<li>${CHECK_SVG}<span>${esc(t.title)}</span></li>`).join('')}</ul>` : ''}`;
+  }
+
   const topLevel = (list) => list.filter((t) => !t.parent);
   const priRank = { high: 0, normal: 1, low: 2 };
   function taskOrder(a, b) {
@@ -271,15 +360,33 @@
   async function toggleTodo(id, li) {
     const t = findTodo(id); if (!t) return;
     const done = !t.done;
+    const prevCompleted = t.completed;
     t.done = done; // optimistic
-    if (navigator.vibrate) navigator.vibrate(8);
-    li.querySelector('.check').classList.toggle('on', done);
-    li.classList.toggle('done', done);
+    t.completed = done ? localISO(new Date()) : '';
+    if (navigator.vibrate) navigator.vibrate(done ? [8, 40, 12] : 8);
+    const check = li && li.querySelector('.check');
+    if (check) check.classList.toggle('on', done);
+    if (li) li.classList.toggle('done', done);
+    if (done) celebrate(t);
     setTimeout(render, 380);
     if (isConnected()) {
       try { await api('updateTodo', { todo: { id, done } }); render(); }
-      catch (e) { t.done = !done; render(); toast(e.message); }
+      catch (e) { t.done = !done; t.completed = prevCompleted; render(); toast(e.message); }
     }
+  }
+
+  // A little cheer for every win, with the real count for today.
+  const CHEERS = ['Nice!', 'Done!', 'Look at you.', 'One less thing.', 'That counts.', 'Boom.', 'Yes!'];
+  function celebrate(t) {
+    const d = data();
+    const n = winsByDay(d)[dayKey(new Date())] || 1;
+    let msg = `${CHEERS[Math.floor(Math.random() * CHEERS.length)]} ${n} ${n === 1 ? 'win' : 'wins'} today.`;
+    if (t.parent) {
+      const sibs = d.todos.filter((s) => s.parent === t.parent);
+      if (sibs.every((s) => s.done)) msg = 'Every step done! Check off the whole task.';
+    }
+    toast(msg);
+    const w = $('#wins'); w.classList.remove('pop'); void w.offsetWidth; w.classList.add('pop');
   }
 
   function openTask(id) {
@@ -607,13 +714,32 @@
     $('#openChat').addEventListener('click', () => { renderChat(); openSheet('chat'); });
     $('#clearChat').addEventListener('click', () => { state.history = []; store.set('history', []); renderChat(); });
 
+    $('#nextStep').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-ns]'); if (!b) return;
+      const id = $('#nextStep').dataset.id;
+      if (b.dataset.ns === 'done') {
+        const box = $('#nextStep'); box.classList.add('leaving');
+        toggleTodo(id, null);
+      }
+      if (b.dataset.ns === 'skip') { skipped.add(id); renderNextStep(data()); }
+      if (b.dataset.ns === 'break') breakDown(findTodo(id));
+    });
+    $('#breakPicks').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-break]'); if (b) breakDown(findTodo(b.dataset.break));
+    });
+    $('#breakForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const input = $('#breakInput'); const v = input.value.trim(); if (!v) return;
+      input.value = ''; input.blur(); breakNew(v);
+    });
+
     $('#quickAdd').addEventListener('submit', quickAdd);
     $('#taskForm').addEventListener('submit', saveTask);
     $('#tDelete').addEventListener('click', deleteTask);
     $$('#tPriority button').forEach((b) => b.addEventListener('click', () => { $$('#tPriority button').forEach((x) => x.classList.toggle('on', x === b)); }));
     $('#tBreak').addEventListener('click', () => {
       const t = findTodo(state.editing); closeSheets();
-      if (t) ask(`Break "${t.title}" into small steps and add them as sub-tasks.`);
+      breakDown(t);
     });
 
     $('#openSettings').addEventListener('click', openSettings);

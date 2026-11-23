@@ -137,12 +137,16 @@ function doPost(e) {
 /** Everything the Today screen needs, in one response. */
 function snapshot_() {
   var now = new Date();
+  var all = readTodos_();
+  var weekAgo = fmt_(new Date(now.getTime() - 7 * 86400000));
   return {
     ok: true,
     timezone: tz_(),
     now: fmt_(now),
     events: weekEvents_(),
-    todos: listTodos_(true),
+    todos: all.filter(function (t) { return !t.done || t.completed >= weekAgo; })
+      .map(function (t) { delete t.row; return t; }),
+    wins: winsHistory_(all),
     reminders: {
       on: remindersScheduled_() && pushSubs_().length > 0,
       scheduled: remindersScheduled_(),
@@ -150,6 +154,21 @@ function snapshot_() {
       vapidKey: vapidKeys_().publicKey
     }
   };
+}
+
+/**
+ * How many tasks and steps were finished each day, for the last 90 days.
+ * The app uses this for the Wins section (this week and the daily streak).
+ */
+function winsHistory_(todos) {
+  var since = fmt_(new Date(Date.now() - 90 * 86400000)).slice(0, 10);
+  var days = {};
+  todos.forEach(function (t) {
+    if (!t.done || !t.completed) return;
+    var day = String(t.completed).slice(0, 10);
+    if (day >= since) days[day] = (days[day] || 0) + 1;
+  });
+  return { days: days };
 }
 
 /**
@@ -304,6 +323,7 @@ function systemPrompt_() {
     '- "Remind me 30 minutes before my dentist appointment" means a to-do (e.g. "Leave for dentist") with remind_at 30 minutes before that event starts.',
     '- With no time, do not set remind_at. He gets a morning rundown of what is due anyway.',
     eventLead_() ? '- He also gets a phone nudge ' + eventLead_() + ' minutes before each calendar event automatically; only add a reminder for an event if he asks for a different time.' : '- Automatic event nudges are off, so add a reminder to-do if he asks to be reminded about an event.',
+    '- Chris has ADHD. Starting is the hardest part, and finishing things feels great. When you break a task into steps (as sub-tasks with parent_id): make 3 to 6 steps of about 5 to 15 minutes each, start each with a verb, make the first step tiny and obvious (like "Open the doc and write the title"), set minutes on each step, and give each step the same due date as the task. Add the steps in the order he should do them. Then reply in one short, encouraging sentence that names the first step.',
     '- When he asks what to work on, look at his to-dos and today\'s free time and suggest one or two concrete next steps.',
     '- Only delete events or tasks when he clearly asks you to.',
     '- Times you send to tools are local times in ' + tz_() + ', formatted YYYY-MM-DDTHH:MM. Dates are YYYY-MM-DD.',
@@ -590,7 +610,7 @@ function readTodos_() {
       priority: String(r[4] || 'normal'),
       done: r[5] === true || r[5] === 'TRUE',
       created: String(r[6] || ''),
-      completed: String(r[7] || ''),
+      completed: normDateTime_(r[7]),
       parent: String(r[8] || ''),
       minutes: r[9] ? Number(r[9]) : null,
       remind: normDateTime_(r[10]),
