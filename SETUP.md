@@ -95,6 +95,30 @@ A square or wide widget that looks like the Google Calendar one: today's date, y
 
 The widget refreshes about every 15 minutes (iPhone decides the exact timing). Tapping it runs the **Ask Tempo** shortcut from Part 4, so make sure that shortcut has exactly that name. If you'd rather a tap open the Tempo app, type `app` in the widget's **Parameter** box.
 
+## Part 6: Reminders on your iPhone (5 min)
+
+Tempo can buzz your phone when a task's reminder time comes, 15 minutes before each calendar event, and with a short rundown at 8 am. Notifications come through **ntfy**, a free app. You don't need an account.
+
+1. On your iPhone, install **ntfy** from the App Store (the white app with a green notification bubble). Open it and allow notifications.
+2. On your Mac, go to **script.google.com**, open **Tempo**, and replace everything in `Code.gs` with the newest [`backend/Code.gs`](backend/Code.gs). Press **⌘S**.
+3. Change the dropdown next to **Run** to `setupReminders` and click **Run**. Google asks for permission once more (Tempo now needs to run on a timer): **Review permissions → Advanced → Go to Tempo (unsafe) → Allow**.
+4. At the bottom, copy the topic name it prints (it starts with `tempo-`).
+5. In ntfy on your iPhone, tap **+**, paste the topic name, and tap **Subscribe**. A "Tempo reminders are on" test arrives shortly after.
+6. Back in Apps Script: **Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy**.
+
+Now say things like *"Remind me to call Mom at 5"* or *"Remind me to leave 30 minutes before my dentist appointment"*. You can also tap any task and set **Remind me**. Reminders for tasks have **Done** and **Snooze 1 hr** buttons (press and hold the notification to see them). Tempo → Settings shows your topic and has a **Send a test reminder** button.
+
+The topic name works like a password: anyone who knows it could read your reminders, so don't share it.
+
+**Changing the timing** (optional), in Project Settings → Script Properties:
+
+| Property | What it does | Default |
+|---|---|---|
+| `EVENT_REMINDER_MINUTES` | Minutes before each event. `0` turns event nudges off (handy if Outlook already alerts you). | `15` |
+| `MORNING_HOUR` | Hour of the morning rundown, `0` to `23`. `off` turns it off. | `8` |
+
+To turn all reminders off, run `stopReminders`.
+
 ## On your Mac
 
 - Open the same address in Safari, then choose **File → Add to Dock**. Tempo opens as its own app.
@@ -120,6 +144,7 @@ Tempo will now show your school events too (it can read them but not change them
 | "Add your Claude API key…" | Part 2, step 5: check `ANTHROPIC_API_KEY` is spelled exactly like that. |
 | "Your Claude account is out of credit" | Add credit at console.anthropic.com → Billing. |
 | You changed `Code.gs` and nothing changed in the app | Apps Script needs a new version: **Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy**. |
+| No reminders arrive | In Tempo → Settings, tap **Send a test reminder**. If nothing comes, check the topic in ntfy matches exactly, and that ntfy is allowed to send notifications (iPhone Settings → ntfy). |
 | Anything else | Send me a screenshot. |
 
 ## Changing which Claude model it uses
