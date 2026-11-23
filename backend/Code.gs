@@ -30,7 +30,6 @@ var TODO_HEADERS = ['id', 'title', 'notes', 'due', 'priority', 'done', 'created'
 var DEFAULT_EVENT_REMINDER_MINUTES = 15;
 var DEFAULT_MORNING_HOUR = 8;
 var NTFY_SERVER = 'https://ntfy.sh';
-var DEFAULT_APP_URL = 'https://johnlkellyjr.github.io/tempo/';
 
 /* ═════════════════════════ One-time setup ═════════════════════════ */
 
@@ -784,8 +783,9 @@ function notify_(n) {
     title: n.title,
     message: n.message || ' ',
     tags: n.tags || [],
-    priority: n.priority || 3,
-    click: PropertiesService.getScriptProperties().getProperty('APP_URL') || DEFAULT_APP_URL
+    priority: n.priority || 3
+    // No tap-through link: iPhone opens links in Safari, not in the Tempo
+    // home-screen app, and Safari's copy isn't connected (it shows sample data).
   };
   if (n.actions && n.actions.length) payload.actions = n.actions;
   // Google's connection to ntfy.sh sometimes fails for a moment
@@ -830,14 +830,11 @@ function reminderAction_(p) {
   return 'Unknown action.';
 }
 
-/** The app tells the brain its own address, so reminder buttons and taps know where to go. */
+/** The app tells the brain its own address, so reminder buttons know where to go. */
 function rememberUrls_(body) {
   var props = PropertiesService.getScriptProperties();
   if (typeof body.url === 'string' && /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(body.url) && props.getProperty('WEB_APP_URL') !== body.url) {
     props.setProperty('WEB_APP_URL', body.url);
-  }
-  if (typeof body.appUrl === 'string' && /^https:\/\/[^\s]+$/.test(body.appUrl) && props.getProperty('APP_URL') !== body.appUrl) {
-    props.setProperty('APP_URL', body.appUrl);
   }
 }
 
