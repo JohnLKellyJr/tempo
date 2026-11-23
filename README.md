@@ -15,7 +15,7 @@ iPhone / Mac app  ──►  Apps Script web app  ──►  Claude API
                               │
                               ├─► Google Calendar (read all calendars, write personal)
                               ├─► Google Sheet "Tempo to-do list"
-                              └─► ntfy (free push notifications to your iPhone, every 5 min check)
+                              └─► Web Push (Tempo's own notifications, checked every 5 min)
 ```
 
 ## Trying the app without setup

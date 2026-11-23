@@ -97,18 +97,17 @@ The widget refreshes about every 15 minutes (iPhone decides the exact timing). T
 
 ## Part 6: Reminders on your iPhone (5 min)
 
-Tempo can buzz your phone when a task's reminder time comes, 15 minutes before each calendar event, and with a short rundown at 8 am. Notifications come through **ntfy**, a free app. You don't need an account.
+Tempo can buzz your phone when a task's reminder time comes, 15 minutes before each calendar event, and with a short rundown at 8 am. The notifications come from Tempo itself (iPhone with iOS 16.4 or newer), and Low Power Mode doesn't block them.
 
-1. On your iPhone, install **ntfy** from the App Store (the white app with a green notification bubble). Open it and allow notifications.
-2. On your Mac, go to **script.google.com**, open **Tempo**, and replace everything in `Code.gs` with the newest [`backend/Code.gs`](backend/Code.gs). Press **⌘S**.
-3. Change the dropdown next to **Run** to `setupReminders` and click **Run**. Google asks for permission once more (Tempo now needs to run on a timer): **Review permissions → Advanced → Go to Tempo (unsafe) → Allow**.
-4. At the bottom, copy the topic name it prints (it starts with `tempo-`).
-5. In ntfy on your iPhone, tap **+**, paste the topic name, and tap **Subscribe**. Then run `setupReminders` once more so a "Tempo reminders are on" test arrives on your phone (the first run happened before you subscribed, so that one is missed).
-6. Back in Apps Script: **Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy**.
+1. On your Mac, go to **script.google.com**, open **Tempo**, and replace everything in `Code.gs` with the newest [`backend/Code.gs`](backend/Code.gs). Press **⌘S**.
+2. Change the dropdown next to **Run** to `setupReminders` and click **Run**. If Google asks for permission, click **Review permissions → Advanced → Go to Tempo (unsafe) → Allow**. (If you ran it before, running it again is fine.)
+3. **Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy**.
+4. On your iPhone, open **Tempo from its home-screen icon** (not in Safari). Tap the **gear**, then **Turn on notifications**, then **Allow**.
+5. Tap **Send a test reminder**. A Tempo notification should pop up within a few seconds.
 
-Now say things like *"Remind me to call Mom at 5"* or *"Remind me to leave 30 minutes before my dentist appointment"*. You can also tap any task and set **Remind me**. Reminders for tasks have **Done** and **Snooze 1 hr** buttons (press and hold the notification to see them). Tempo → Settings shows your topic and has a **Send a test reminder** button.
+Now say things like *"Remind me to call Mom at 5"* or *"Remind me to leave 30 minutes before my dentist appointment"*. You can also tap any task and set **Remind me**. Tapping a notification opens Tempo. Reminders are checked every 5 minutes, so one can arrive up to about 5 minutes after its time.
 
-The topic name works like a password: anyone who knows it could read your reminders, so don't share it.
+Want them on your Mac too? Do step 4 in Tempo on the Mac as well.
 
 **Changing the timing** (optional), in Project Settings → Script Properties:
 
@@ -144,7 +143,7 @@ Tempo will now show your school events too (it can read them but not change them
 | "Add your Claude API key…" | Part 2, step 5: check `ANTHROPIC_API_KEY` is spelled exactly like that. |
 | "Your Claude account is out of credit" | Add credit at console.anthropic.com → Billing. |
 | You changed `Code.gs` and nothing changed in the app | Apps Script needs a new version: **Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy**. |
-| No reminders arrive | In Tempo → Settings, tap **Send a test reminder**. If nothing comes, check the topic in ntfy matches exactly, and that ntfy is allowed to send notifications (iPhone Settings → ntfy). |
+| No reminders arrive | In Tempo → Settings, tap **Send a test reminder**. If nothing comes, check iPhone Settings → Notifications → Tempo is allowed, then tap **Turn on notifications** again in Tempo. |
 | Anything else | Send me a screenshot. |
 
 ## Changing which Claude model it uses

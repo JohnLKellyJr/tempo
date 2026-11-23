@@ -90,8 +90,7 @@
       method: 'POST',
       // text/plain avoids a CORS pre-flight, which Apps Script does not answer.
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      // url/appUrl let the brain put working buttons and links on reminders.
-      body: JSON.stringify(Object.assign({ key: state.conn.key, action, url: state.conn.url, appUrl: location.origin + location.pathname.replace(/index\.html$/, '') }, payload)),
+      body: JSON.stringify(Object.assign({ key: state.conn.key, action }, payload)),
       redirect: 'follow'
       });
     } catch (e) {
@@ -457,23 +456,72 @@
     openSheet('settings');
   }
 
-  function renderReminderStatus() {
+  // ───────────── Notifications (Tempo's own, via Web Push) ─────────────
+  const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const b64ToBytes = (b64) => { const s = atob(b64.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((b64.length + 3) % 4)); return Uint8Array.from(s, (c) => c.charCodeAt(0)); };
+
+  // The service worker can't read localStorage, so it gets the connection
+  // through Cache Storage. It needs it to fetch what a notification should say.
+  async function shareConnWithWorker() {
+    try {
+      const c = await caches.open('tempo-conn');
+      if (isConnected()) await c.put('conn', new Response(JSON.stringify(state.conn)));
+      else await c.delete('conn');
+    } catch (e) { /* ignore */ }
+  }
+
+  async function currentPushSub() {
+    if (!pushSupported()) return null;
+    try { const reg = await navigator.serviceWorker.getRegistration(); return reg ? await reg.pushManager.getSubscription() : null; } catch (e) { return null; }
+  }
+
+  async function renderReminderStatus() {
     const box = $('#sReminders');
     const r = isConnected() && state.data && state.data.reminders;
     box.hidden = !isConnected();
-    if (!r) { $('#sRemText').textContent = 'Update your brain to get reminders (see SETUP, Part 6).'; $('#sRemTopic').hidden = true; $('#sRemTest').hidden = true; return; }
-    $('#sRemText').textContent = r.on
-      ? 'On. Reminders arrive in the free ntfy app. Subscribe to this topic there:'
-      : 'Off. In Apps Script, run setupReminders once (SETUP, Part 6).';
-    $('#sRemTopic').hidden = !r.topic;
-    $('#sRemTopicName').textContent = r.topic || '';
-    $('#sRemTest').hidden = !r.on;
+    const text = $('#sRemText'), on = $('#sRemOn'), test = $('#sRemTest');
+    on.hidden = true; test.hidden = true;
+    if (!r || r.vapidKey == null) { text.textContent = 'Update your brain to get reminders (see SETUP, Part 6).'; return; }
+    if (!pushSupported()) {
+      text.textContent = 'To get reminders, open Tempo from its icon on your home screen (not in Safari), then come back here.';
+      return;
+    }
+    if (Notification.permission === 'denied') {
+      text.textContent = 'Notifications are blocked. Turn them on in iPhone Settings → Notifications → Tempo, then come back here.';
+      return;
+    }
+    const sub = await currentPushSub();
+    if (sub && Notification.permission === 'granted') {
+      text.textContent = r.scheduled
+        ? 'On. Reminders pop up on this device, even in Low Power Mode.'
+        : 'Notifications are on, but reminder checks aren’t running yet. In Apps Script, run setupReminders once.';
+      test.hidden = !r.scheduled;
+    } else {
+      text.textContent = 'Get a notification when a reminder is due, before events, and each morning.';
+      on.hidden = false;
+    }
   }
 
-  async function copyTopic() {
-    const topic = $('#sRemTopicName').textContent;
-    try { await navigator.clipboard.writeText(topic); toast('Topic copied'); }
-    catch (e) { toast(topic); }
+  async function turnOnNotifications() {
+    const b = $('#sRemOn'); b.disabled = true;
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { toast('Notifications weren’t allowed'); return; }
+      const key = state.data && state.data.reminders && state.data.reminders.vapidKey;
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (sub) { try { await sub.unsubscribe(); } catch (e) { /* ignore */ } }
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(key) });
+      await shareConnWithWorker();
+      await api('savePush', { subscription: sub.toJSON() });
+      await refresh(true);
+      toast('Notifications are on');
+    } catch (e) {
+      toast('Couldn’t turn on notifications: ' + e.message);
+    } finally {
+      b.disabled = false;
+      renderReminderStatus();
+    }
   }
 
   async function testReminder() {
@@ -517,7 +565,7 @@
       const prev = state.conn; state.conn = conn;
       try {
         await api('today');
-        store.set('conn', conn);
+        store.set('conn', conn); shareConnWithWorker();
         s.className = 'status ok'; s.textContent = 'Connected!';
         setTimeout(closeSheets, 600);
         toast('Connected to your calendar');
@@ -571,10 +619,10 @@
     $('#openSettings').addEventListener('click', openSettings);
     $('#demoConnect').addEventListener('click', openSettings);
     $('#settingsForm').addEventListener('submit', saveSettings);
-    $('#sRemCopy').addEventListener('click', copyTopic);
+    $('#sRemOn').addEventListener('click', turnOnNotifications);
     $('#sRemTest').addEventListener('click', testReminder);
     $('#sDisconnect').addEventListener('click', () => {
-      state.conn = null; state.data = null; store.del('conn'); store.del('snapshot');
+      state.conn = null; state.data = null; store.del('conn'); store.del('snapshot'); shareConnWithWorker();
       closeSheets(); render(); toast('Disconnected');
     });
 
@@ -607,5 +655,6 @@
 
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
+    shareConnWithWorker();
   }
 })();
