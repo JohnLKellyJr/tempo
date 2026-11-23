@@ -696,13 +696,14 @@ function sendTodoReminders_(now) {
   due.forEach(function (t) {
     var late = now - parseLocal_(t.remind) > 6 * 3600000; // reminders were off for hours: don't send a pile of stale nudges
     if (!late) {
-      notify_({
+      // If sending fails, leave it unmarked so the next check tries again.
+      try { notify_({
         title: t.title,
         message: t.notes || ('Reminder from Tempo' + (t.due && t.due > fmt_(now).slice(0, 10) ? ' · due ' + niceDay_(t.due) : '')),
         tags: ['alarm_clock'],
         priority: t.priority === 'high' ? 4 : 3,
         actions: todoActions_(t.id)
-      });
+      }); } catch (err) { Logger.log('⚠️ Could not send "' + t.title + '", will retry: ' + err); return; }
     }
     var lock = LockService.getScriptLock(); lock.waitLock(10000);
     try { todoSheet_().getRange(t.row, TODO_HEADERS.indexOf('reminded') + 1).setValue(fmt_(now)); }
@@ -723,11 +724,11 @@ function sendEventReminders_(now, props) {
       var key = e.id + '@' + e.start;
       if (e.all_day || start <= now || sent[key]) return;
       var mins = Math.round((start - now) / 60000);
-      notify_({
+      try { notify_({
         title: e.title,
         message: (mins <= 1 ? 'Starting now' : 'In ' + mins + ' min') + ' · ' + niceTime_(e.start).replace(/^\w+ /, '') + (e.location ? ' · ' + e.location : ''),
         tags: ['calendar']
-      });
+      }); } catch (err) { Logger.log('⚠️ Could not send "' + e.title + '", will retry: ' + err); return; }
       sent[key] = e.start;
     });
     var cutoff = fmt_(new Date(now.getTime() - 86400000));
@@ -787,11 +788,23 @@ function notify_(n) {
     click: PropertiesService.getScriptProperties().getProperty('APP_URL') || DEFAULT_APP_URL
   };
   if (n.actions && n.actions.length) payload.actions = n.actions;
-  var resp = UrlFetchApp.fetch(NTFY_SERVER, {
-    method: 'post', contentType: 'application/json',
-    payload: JSON.stringify(payload), muteHttpExceptions: true
-  });
-  if (resp.getResponseCode() >= 300) Logger.log('ntfy said ' + resp.getResponseCode() + ': ' + resp.getContentText());
+  // Google's connection to ntfy.sh sometimes fails for a moment
+  // ("Address unavailable"), so try a few times before giving up.
+  var lastErr;
+  for (var attempt = 0; attempt < 4; attempt++) {
+    if (attempt) Utilities.sleep(attempt * 3000);
+    try {
+      var resp = UrlFetchApp.fetch(NTFY_SERVER, {
+        method: 'post', contentType: 'application/json',
+        payload: JSON.stringify(payload), muteHttpExceptions: true
+      });
+      var code = resp.getResponseCode();
+      if (code < 300) return;
+      lastErr = new Error('ntfy said ' + code + ': ' + resp.getContentText().slice(0, 200));
+      if (code < 500 && code !== 429) break;
+    } catch (err) { lastErr = err; }
+  }
+  throw lastErr;
 }
 
 /** "Done" and "Snooze 1 hour" buttons on a to-do reminder. */
