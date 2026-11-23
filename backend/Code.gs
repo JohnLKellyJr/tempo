@@ -170,6 +170,7 @@ function weekEvents_() {
   return events;
 }
 function clearEventCache_() {
+  CacheService.getScriptCache().remove('soon');
   CacheService.getScriptCache().remove('week:' + Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd'));
 }
 
@@ -678,7 +679,19 @@ function sendReminders() {
   var now = new Date();
   var props = PropertiesService.getScriptProperties();
 
-  // 1. To-dos whose reminder time has come.
+  // Each part runs on its own, so a slow or broken calendar can never
+  // stop a to-do reminder from going out.
+  safely_('to-do reminders', function () { sendTodoReminders_(now); });
+  safely_('event reminders', function () { sendEventReminders_(now, props); });
+  safely_('morning rundown', function () { sendMorning_(now, props); });
+}
+
+function safely_(what, fn) {
+  try { fn(); } catch (err) { Logger.log('⚠️ ' + what + ' failed: ' + (err && err.stack || err)); }
+}
+
+/** To-dos whose reminder time has come. */
+function sendTodoReminders_(now) {
   var due = readTodos_().filter(function (t) { return !t.done && t.remind && !t.reminded && parseLocal_(t.remind) <= now; });
   due.forEach(function (t) {
     var late = now - parseLocal_(t.remind) > 6 * 3600000; // reminders were off for hours: don't send a pile of stale nudges
@@ -695,14 +708,17 @@ function sendReminders() {
     try { todoSheet_().getRange(t.row, TODO_HEADERS.indexOf('reminded') + 1).setValue(fmt_(now)); }
     finally { lock.releaseLock(); }
   });
+}
 
-  // 2. Calendar events starting soon.
+/** Calendar events starting soon. */
+function sendEventReminders_(now, props) {
   var lead = eventLead_();
   if (lead > 0) {
     var sent = {};
     try { sent = JSON.parse(props.getProperty('SENT_EVENTS') || '{}'); } catch (ignore) {}
-    var soon = listEvents_(now, new Date(now.getTime() + (lead + 1) * 60000));
-    soon.forEach(function (e) {
+    var until = fmt_(new Date(now.getTime() + (lead + 1) * 60000));
+    soonEvents_(now).forEach(function (e) {
+      if (e.start > until) return;
       var start = parseLocal_(e.start);
       var key = e.id + '@' + e.start;
       if (e.all_day || start <= now || sent[key]) return;
@@ -718,8 +734,25 @@ function sendReminders() {
     Object.keys(sent).forEach(function (k) { if (sent[k] < cutoff) delete sent[k]; });
     props.setProperty('SENT_EVENTS', JSON.stringify(sent));
   }
+}
 
-  // 3. Morning rundown, once a day.
+/**
+ * Events starting in the next 3 hours. Reading every calendar is slow
+ * (a subscribed school calendar can take most of a minute), so the list is
+ * kept for 10 minutes instead of being read every 5-minute check. Tempo's
+ * own changes clear it right away.
+ */
+function soonEvents_(now) {
+  var cache = CacheService.getScriptCache();
+  var hit = cache.get('soon');
+  if (hit) { try { return JSON.parse(hit); } catch (ignore) {} }
+  var events = listEvents_(now, new Date(now.getTime() + 3 * 3600000));
+  try { cache.put('soon', JSON.stringify(events), 600); } catch (ignore) {}
+  return events;
+}
+
+/** Morning rundown, once a day. */
+function sendMorning_(now, props) {
   var hour = morningHour_();
   var today = fmt_(now).slice(0, 10);
   var h = Number(Utilities.formatDate(now, tz_(), 'H'));
