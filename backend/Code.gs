@@ -6,7 +6,7 @@
  * Shortcut), asks Claude what to do, and then adds events to your
  * Google Calendar and keeps your to-do list in a private Google Sheet.
  * It can also nudge your phone before events and when a task's reminder
- * is due (run "setupReminders" once to turn that on).
+ * is due (run "setupReminders" once, then turn on notifications in the app).
  *
  * You only ever need to touch the SETTINGS section below.
  */
@@ -29,7 +29,6 @@ var TODO_HEADERS = ['id', 'title', 'notes', 'due', 'priority', 'done', 'created'
 //   MORNING_HOUR            hour for the morning rundown, 0–23 ("off" = off)
 var DEFAULT_EVENT_REMINDER_MINUTES = 15;
 var DEFAULT_MORNING_HOUR = 8;
-var NTFY_SERVER = 'https://ntfy.sh';
 
 /* ═════════════════════════ One-time setup ═════════════════════════ */
 
@@ -67,23 +66,18 @@ function connectionCode() { showAppKey(); }
 
 /**
  * Run this ONCE to turn on reminders (select "setupReminders", then Run).
- * It makes your private reminder channel, checks for reminders every
- * 5 minutes, and sends a test notification.
+ * It checks for reminders every 5 minutes. Then turn on notifications in
+ * Tempo → Settings on your iPhone.
  */
 function setupReminders() {
-  var props = PropertiesService.getScriptProperties();
-  if (!props.getProperty('NTFY_TOPIC')) {
-    props.setProperty('NTFY_TOPIC', 'tempo-' + Utilities.getUuid().replace(/-/g, '').slice(0, 16));
-  }
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'sendReminders') ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('sendReminders').timeBased().everyMinutes(5).create();
   todoSheet_(); // adds the reminder columns to the Sheet if needed
-  notify_({ title: 'Tempo reminders are on', message: 'This is what a reminder looks like.', tags: ['bell'] });
-  Logger.log('✅ Reminders are on. In the ntfy app on your iPhone, tap +, and subscribe to this topic:');
-  Logger.log(props.getProperty('NTFY_TOPIC'));
-  Logger.log('Then: Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy.');
+  vapidKeys_(); // makes Tempo's notification keys
+  Logger.log('✅ Reminders are on. Next: Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy.');
+  Logger.log('Then on your iPhone: open Tempo from the home screen → Settings → Turn on notifications.');
 }
 
 /** Run this to turn reminders off again. */
@@ -96,9 +90,7 @@ function stopReminders() {
 
 /* ═════════════════════════ Web entry points ═════════════════════════ */
 
-function doGet(e) {
-  var p = (e && e.parameter) || {};
-  if (p.r) return HtmlService.createHtmlOutput('<p style="font:18px -apple-system,sans-serif;padding:24px">' + reminderAction_(p) + '</p>');
+function doGet() {
   return json_({ ok: true, app: 'Tempo', message: 'Tempo brain is running.' });
 }
 
@@ -108,7 +100,6 @@ function doPost(e) {
     if (!body.key || body.key !== secret_()) {
       return json_({ ok: false, error: 'Wrong app key. Check the App key in Tempo → Settings.' });
     }
-    rememberUrls_(body);
     var action = body.action || 'ask';
     switch (action) {
       case 'ping':
@@ -127,9 +118,14 @@ function doPost(e) {
         deleteTodo_(String(body.id || ''));
         return json_(snapshot_());
       case 'testReminder':
-        if (!topic_()) return json_({ ok: false, error: 'Reminders are off. In Apps Script, run setupReminders once.' });
-        notify_({ title: 'Test from Tempo', message: 'Reminders are working.', tags: ['bell'] });
+        if (!remindersScheduled_()) return json_({ ok: false, error: 'Reminders are off. In Apps Script, run setupReminders once.' });
+        notify_({ title: 'Test from Tempo', message: 'Reminders are working.' });
         return json_({ ok: true });
+      case 'savePush':
+        savePushSub_(body.subscription);
+        return json_({ ok: true, devices: pushSubs_().length });
+      case 'pendingPush':
+        return json_({ ok: true, items: pendingPush_(Number(body.since) || 0) });
       default:
         return json_({ ok: false, error: 'Unknown action: ' + action });
     }
@@ -147,7 +143,12 @@ function snapshot_() {
     now: fmt_(now),
     events: weekEvents_(),
     todos: listTodos_(true),
-    reminders: { on: !!topic_() && remindersScheduled_(), topic: topic_() || '' }
+    reminders: {
+      on: remindersScheduled_() && pushSubs_().length > 0,
+      scheduled: remindersScheduled_(),
+      devices: pushSubs_().length,
+      vapidKey: vapidKeys_().publicKey
+    }
   };
 }
 
@@ -669,12 +670,12 @@ function deleteTodo_(id) {
 }
 
 /* ═════════════════════════ Reminders ═════════════════════════ */
-// Notifications go through ntfy (ntfy.sh), a free push service with an
-// iPhone app. Your channel ("topic") is a long random name only you know.
+// Tempo sends its own notifications to every device where you tapped
+// "Turn on notifications" (see Web Push below).
 
 /** Runs every 5 minutes (setupReminders schedules it). */
 function sendReminders() {
-  if (!topic_()) return;
+  if (!pushSubs_().length) return;
   var now = new Date();
   var props = PropertiesService.getScriptProperties();
 
@@ -699,9 +700,6 @@ function sendTodoReminders_(now) {
       try { notify_({
         title: t.title,
         message: t.notes || ('Reminder from Tempo' + (t.due && t.due > fmt_(now).slice(0, 10) ? ' · due ' + niceDay_(t.due) : '')),
-        tags: ['alarm_clock'],
-        priority: t.priority === 'high' ? 4 : 3,
-        actions: todoActions_(t.id)
       }); } catch (err) { Logger.log('⚠️ Could not send "' + t.title + '", will retry: ' + err); return; }
     }
     var lock = LockService.getScriptLock(); lock.waitLock(10000);
@@ -725,8 +723,7 @@ function sendEventReminders_(now, props) {
       var mins = Math.round((start - now) / 60000);
       try { notify_({
         title: e.title,
-        message: (mins <= 1 ? 'Starting now' : 'In ' + mins + ' min') + ' · ' + niceTime_(e.start).replace(/^\w+ /, '') + (e.location ? ' · ' + e.location : ''),
-        tags: ['calendar']
+        message: (mins <= 1 ? 'Starting now' : 'In ' + mins + ' min') + ' · ' + niceTime_(e.start).replace(/^\w+ /, '') + (e.location ? ' · ' + e.location : '')
       }); } catch (err) { Logger.log('⚠️ Could not send "' + e.title + '", will retry: ' + err); return; }
       sent[key] = e.start;
     });
@@ -759,7 +756,7 @@ function sendMorning_(now, props) {
   if (hour != null && h >= hour && h < hour + 3 && props.getProperty('LAST_MORNING') !== today) {
     props.setProperty('LAST_MORNING', today);
     var rundown = morningRundown_(today);
-    if (rundown) notify_({ title: 'Good morning', message: rundown, tags: ['sunrise'] });
+    if (rundown) notify_({ title: 'Good morning', message: rundown });
   }
 }
 
@@ -777,73 +774,11 @@ function morningRundown_(today) {
   return lines.join('\n');
 }
 
+/** Sends a notification to every device with Tempo notifications on. */
 function notify_(n) {
-  var payload = {
-    topic: topic_(),
-    title: n.title,
-    message: n.message || ' ',
-    tags: n.tags || [],
-    priority: n.priority || 3
-    // No tap-through link: iPhone opens links in Safari, not in the Tempo
-    // home-screen app, and Safari's copy isn't connected (it shows sample data).
-  };
-  if (n.actions && n.actions.length) payload.actions = n.actions;
-  // Google's connection to ntfy.sh sometimes fails for a moment
-  // ("Address unavailable"), so try a few times before giving up.
-  var lastErr;
-  for (var attempt = 0; attempt < 4; attempt++) {
-    if (attempt) Utilities.sleep(attempt * 3000);
-    try {
-      var resp = UrlFetchApp.fetch(NTFY_SERVER, {
-        method: 'post', contentType: 'application/json',
-        payload: JSON.stringify(payload), muteHttpExceptions: true
-      });
-      var code = resp.getResponseCode();
-      if (code < 300) return;
-      lastErr = new Error('ntfy said ' + code + ': ' + resp.getContentText().slice(0, 200));
-      if (code < 500 && code !== 429) break;
-    } catch (err) { lastErr = err; }
-  }
-  throw lastErr;
+  if (!pushSubs_().length) throw new Error('Turn on notifications in Tempo → Settings first.');
+  return webPush_(n);
 }
-
-/** "Done" and "Snooze 1 hour" buttons on a to-do reminder. */
-function todoActions_(id) {
-  var url = PropertiesService.getScriptProperties().getProperty('WEB_APP_URL');
-  if (!url) return [];
-  var link = function (r) { return url + '?r=' + r + '&id=' + encodeURIComponent(id) + '&sig=' + sign_(r + ':' + id); };
-  return [
-    { action: 'http', label: 'Done', url: link('done'), method: 'GET', clear: true },
-    { action: 'http', label: 'Snooze 1 hr', url: link('snooze'), method: 'GET', clear: true }
-  ];
-}
-
-function reminderAction_(p) {
-  var id = String(p.id || '');
-  if (p.sig !== sign_(p.r + ':' + id)) return 'That link is not valid.';
-  if (p.r === 'done') { var t = updateTodo_({ id: id, done: true }); return '✅ Done: ' + t.title; }
-  if (p.r === 'snooze') {
-    var later = fmt_(new Date(Date.now() + 3600000));
-    var s = updateTodo_({ id: id, remind: later });
-    return '😴 I\'ll remind you again at ' + niceTime_(later).replace(/^\w+ /, '') + ': ' + s.title;
-  }
-  return 'Unknown action.';
-}
-
-/** The app tells the brain its own address, so reminder buttons know where to go. */
-function rememberUrls_(body) {
-  var props = PropertiesService.getScriptProperties();
-  if (typeof body.url === 'string' && /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(body.url) && props.getProperty('WEB_APP_URL') !== body.url) {
-    props.setProperty('WEB_APP_URL', body.url);
-  }
-}
-
-function sign_(text) {
-  var raw = Utilities.computeHmacSha256Signature(text, secret_());
-  return Utilities.base64EncodeWebSafe(raw).replace(/=+$/, '').slice(0, 22);
-}
-
-function topic_() { return PropertiesService.getScriptProperties().getProperty('NTFY_TOPIC'); }
 
 function remindersScheduled_() {
   return ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'sendReminders'; });
@@ -869,6 +804,165 @@ function cleanRemind_(v) {
 
 function niceTime_(s) { return Utilities.formatDate(parseLocal_(s), tz_(), 'EEE h:mm a'); }
 function niceDay_(s) { return Utilities.formatDate(parseLocal_(s), tz_(), 'EEE MMM d'); }
+
+/* ═════════════════════════ Tempo's own notifications (Web Push) ═════════════════════════ */
+// An iPhone home-screen web app can get real notifications (iOS 16.4+).
+// They come from Tempo itself, and Low Power Mode doesn't block them.
+// Each one is an empty "wake up" message: the phone then asks this brain
+// what to show (see pendingPush_), so nothing needs to be encrypted here.
+// Push services require the wake-up to be signed (ECDSA P-256, "VAPID"),
+// which Apps Script can't do by itself, so the maths is below.
+
+function pushSubs_() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('PUSH_SUBS') || '[]'); }
+  catch (err) { return []; }
+}
+
+function setPushSubs_(subs) {
+  PropertiesService.getScriptProperties().setProperty('PUSH_SUBS', JSON.stringify(subs.slice(-5)));
+}
+
+function savePushSub_(sub) {
+  if (!sub || typeof sub.endpoint !== 'string' || !/^https:\/\//.test(sub.endpoint)) throw new Error('That device sent a bad notification address.');
+  var subs = pushSubs_().filter(function (s) { return s.endpoint !== sub.endpoint; });
+  subs.push({ endpoint: sub.endpoint, added: fmt_(new Date()) });
+  setPushSubs_(subs);
+}
+
+/** Notifications waiting to be shown, newer than `since` (ms). */
+function pendingPush_(since) {
+  var queue = pushQueue_();
+  var floor = Date.now() - 10 * 60000; // a phone with no memory gets the last 10 minutes
+  return queue.filter(function (q) { return q.ts > Math.max(since, since ? 0 : floor); });
+}
+
+function pushQueue_() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('PUSH_QUEUE') || '[]'); }
+  catch (err) { return []; }
+}
+
+function webPush_(n) {
+  var props = PropertiesService.getScriptProperties();
+  var lock = LockService.getScriptLock(); lock.waitLock(10000);
+  try {
+    var cutoff = Date.now() - 2 * 3600000;
+    var queue = pushQueue_().filter(function (q) { return q.ts > cutoff; });
+    var ts = Math.max(Date.now(), queue.length ? queue[queue.length - 1].ts + 1 : 0);
+    queue.push({ id: 't' + ts, ts: ts, title: n.title, body: n.message || '' });
+    props.setProperty('PUSH_QUEUE', JSON.stringify(queue.slice(-20)));
+  } finally { lock.releaseLock(); }
+
+  var keys = vapidKeys_();
+  var subs = pushSubs_();
+  var delivered = 0, gone = [], lastErr = null;
+  subs.forEach(function (sub) {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (attempt) Utilities.sleep(attempt * 2000);
+      try {
+        var resp = UrlFetchApp.fetch(sub.endpoint, {
+          method: 'post',
+          headers: { Authorization: 'vapid t=' + vapidJwt_(sub.endpoint, keys) + ', k=' + keys.publicKey, TTL: '86400', Urgency: 'high' },
+          muteHttpExceptions: true
+        });
+        var code = resp.getResponseCode();
+        if (code < 300) { delivered++; return; }
+        if (code === 404 || code === 410) { gone.push(sub.endpoint); return; } // that device turned notifications off
+        lastErr = new Error('Push service said ' + code + ': ' + resp.getContentText().slice(0, 200));
+        if (code < 500 && code !== 429) return;
+      } catch (err) { lastErr = err; }
+    }
+  });
+  if (gone.length) setPushSubs_(pushSubs_().filter(function (s) { return gone.indexOf(s.endpoint) < 0; }));
+  if (!delivered) throw lastErr || new Error('No device has Tempo notifications turned on.');
+}
+
+/** The signed pass a push service asks for. Reused for 6 hours per service. */
+function vapidJwt_(endpoint, keys) {
+  var aud = endpoint.match(/^https:\/\/[^\/]+/)[0];
+  var cache = CacheService.getScriptCache();
+  var hit = cache.get('jwt:' + aud);
+  if (hit) return hit;
+  var b64 = function (str) { return b64url_(Utilities.newBlob(str).getBytes()); };
+  var input = b64(JSON.stringify({ typ: 'JWT', alg: 'ES256' })) + '.' +
+    b64(JSON.stringify({ aud: aud, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: 'https://johnlkellyjr.github.io/tempo/' }));
+  var jwt = input + '.' + b64url_(P256.sign(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, input, Utilities.Charset.UTF_8), keys.privateKey));
+  cache.put('jwt:' + aud, jwt, 6 * 3600);
+  return jwt;
+}
+
+/** Tempo's notification keys, made once and kept in Script Properties. */
+function vapidKeys_() {
+  var props = PropertiesService.getScriptProperties();
+  var priv = props.getProperty('VAPID_PRIVATE');
+  var pub = props.getProperty('VAPID_PUBLIC');
+  if (!priv || !pub) {
+    var pair = P256.generate();
+    priv = pair.privateKey; pub = b64url_(pair.publicKey);
+    props.setProperty('VAPID_PRIVATE', priv);
+    props.setProperty('VAPID_PUBLIC', pub);
+  }
+  return { privateKey: priv, publicKey: pub };
+}
+
+function b64url_(bytes) { return Utilities.base64EncodeWebSafe(bytes).replace(/=+$/, ''); }
+
+/** Just enough elliptic-curve maths (NIST P-256) to sign with ES256. */
+var P256 = (function () {
+  var B = function (h) { return BigInt('0x' + h); };
+  var ZERO = BigInt(0), ONE = BigInt(1), TWO = BigInt(2), THREE = BigInt(3);
+  var P = B('ffffffff00000001000000000000000000000000ffffffffffffffffffffffff');
+  var N = B('ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551');
+  var G = { x: B('6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296'),
+            y: B('4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5') };
+  function mod(a, m) { var r = a % m; return r < ZERO ? r + m : r; }
+  function inv(a, m) {
+    var lo = ONE, hi = ZERO, low = mod(a, m), high = m;
+    while (low > ONE) { var r = high / low; var nm = hi - lo * r, nw = high - low * r; hi = lo; high = low; lo = nm; low = nw; }
+    return mod(lo, m);
+  }
+  function add(p, q) {
+    if (!p) return q; if (!q) return p;
+    var l;
+    if (p.x === q.x) {
+      if (mod(p.y + q.y, P) === ZERO) return null;
+      l = mod((THREE * p.x * p.x - THREE) * inv(TWO * p.y, P), P);
+    } else {
+      l = mod((q.y - p.y) * inv(q.x - p.x, P), P);
+    }
+    var x = mod(l * l - p.x - q.x, P);
+    return { x: x, y: mod(l * (p.x - x) - p.y, P) };
+  }
+  function mul(k, pt) {
+    var r = null, a = pt;
+    while (k > ZERO) { if (k & ONE) r = add(r, a); a = add(a, a); k >>= ONE; }
+    return r;
+  }
+  function toBig(bytes) { var h = ''; for (var i = 0; i < bytes.length; i++) h += ('0' + (bytes[i] & 255).toString(16)).slice(-2); return B(h || '0'); }
+  function toBytes(x) { var h = x.toString(16); while (h.length < 64) h = '0' + h; var out = []; for (var i = 0; i < 64; i += 2) { var v = parseInt(h.substr(i, 2), 16); out.push(v > 127 ? v - 256 : v); } return out; }
+  function randomScalar() {
+    var seed = Utilities.getUuid() + Utilities.getUuid() + Date.now() + Math.random();
+    var k = toBig(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, seed)
+      .concat(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, seed + 'x')));
+    return mod(k, N - ONE) + ONE;
+  }
+  return {
+    generate: function () {
+      var d = randomScalar(), q = mul(d, G);
+      return { privateKey: d.toString(16), publicKey: [4].concat(toBytes(q.x), toBytes(q.y)) };
+    },
+    /** digest: SHA-256 bytes. Returns the 64-byte r||s signature. */
+    sign: function (digest, privHex) {
+      var d = B(privHex), z = toBig(digest);
+      for (;;) {
+        var k = randomScalar(), r = mod(mul(k, G).x, N);
+        if (r === ZERO) continue;
+        var s = mod(inv(k, N) * (z + r * d), N);
+        if (s === ZERO) continue;
+        return toBytes(r).concat(toBytes(s));
+      }
+    }
+  };
+})();
 
 /* ═════════════════════════ Helpers ═════════════════════════ */
 
