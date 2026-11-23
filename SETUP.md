@@ -103,7 +103,7 @@ Tempo can buzz your phone when a task's reminder time comes, 15 minutes before e
 2. On your Mac, go to **script.google.com**, open **Tempo**, and replace everything in `Code.gs` with the newest [`backend/Code.gs`](backend/Code.gs). Press **⌘S**.
 3. Change the dropdown next to **Run** to `setupReminders` and click **Run**. Google asks for permission once more (Tempo now needs to run on a timer): **Review permissions → Advanced → Go to Tempo (unsafe) → Allow**.
 4. At the bottom, copy the topic name it prints (it starts with `tempo-`).
-5. In ntfy on your iPhone, tap **+**, paste the topic name, and tap **Subscribe**. A "Tempo reminders are on" test arrives shortly after.
+5. In ntfy on your iPhone, tap **+**, paste the topic name, and tap **Subscribe**. Then run `setupReminders` once more so a "Tempo reminders are on" test arrives on your phone (the first run happened before you subscribed, so that one is missed).
 6. Back in Apps Script: **Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy**.
 
 Now say things like *"Remind me to call Mom at 5"* or *"Remind me to leave 30 minutes before my dentist appointment"*. You can also tap any task and set **Remind me**. Reminders for tasks have **Done** and **Snooze 1 hr** buttons (press and hold the notification to see them). Tempo → Settings shows your topic and has a **Send a test reminder** button.
