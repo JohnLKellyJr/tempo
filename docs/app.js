@@ -73,7 +73,7 @@
         { id: 'a3', title: 'Make the two graphs', due: k(0), priority: 'normal', done: false, minutes: 40, parent: 'a1', notes: '' },
         { id: 'a4', title: 'Email Prof. Lee about extension', due: k(-1), priority: 'normal', done: false, minutes: 10, parent: '', notes: '' },
         { id: 'a5', title: 'Review chapters 7–9 for Bio', due: k(2), priority: 'high', done: false, minutes: 120, parent: '', notes: '' },
-        { id: 'a6', title: 'Pay phone bill', due: k(5), priority: 'low', done: false, minutes: null, parent: '', notes: '' },
+        { id: 'a6', title: 'Pay phone bill', due: k(5), priority: 'low', done: false, minutes: null, parent: '', notes: '', remind: k(5) + 'T09:00' },
         { id: 'a7', title: 'Return library books', due: '', priority: 'normal', done: false, minutes: null, parent: '', notes: '' }
       ]
     };
@@ -90,7 +90,8 @@
       method: 'POST',
       // text/plain avoids a CORS pre-flight, which Apps Script does not answer.
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(Object.assign({ key: state.conn.key, action }, payload)),
+      // url/appUrl let the brain put working buttons and links on reminders.
+      body: JSON.stringify(Object.assign({ key: state.conn.key, action, url: state.conn.url, appUrl: location.origin + location.pathname.replace(/index\.html$/, '') }, payload)),
       redirect: 'follow'
       });
     } catch (e) {
@@ -105,7 +106,7 @@
     }
     if (!json.ok) throw new Error(json.error || 'Something went wrong');
     if (json.events && json.todos) {
-      state.data = { events: json.events, todos: json.todos, now: json.now };
+      state.data = { events: json.events, todos: json.todos, now: json.now, reminders: json.reminders || null };
       store.set('snapshot', state.data);
     }
     return json;
@@ -214,12 +215,17 @@
   }
 
   const CHECK_SVG = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+  const BELL_SVG = '<svg class="bell" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16zM10 20.5a2 2 0 0 0 4 0"/></svg>';
   function taskHTML(t, all, isSub) {
     const today = dayKey(new Date());
     const tags = [];
     if (t.due) {
       const cls = !t.done && t.due < today ? 'overdue' : t.due === today ? 'today' : '';
       tags.push(`<span class="tag ${cls}">${cls === 'overdue' ? 'Overdue · ' : ''}${esc(relDay(t.due))}</span>`);
+    }
+    if (t.remind && !t.done && !t.reminded) {
+      const r = parse(t.remind);
+      tags.push(`<span class="tag remind">${BELL_SVG}${t.remind.slice(0, 10) === t.due ? '' : esc(relDay(t.remind.slice(0, 10))) + ' '}${esc(timeFull(r))}</span>`);
     }
     if (t.priority === 'high' && !t.done) tags.push('<span class="tag high">Priority</span>');
     if (t.minutes) tags.push(`<span class="tag">${t.minutes < 60 ? t.minutes + ' min' : (t.minutes / 60).toFixed(t.minutes % 60 ? 1 : 0) + ' hr'}</span>`);
@@ -282,6 +288,7 @@
     state.editing = id;
     $('#tTitle').value = t.title;
     $('#tDue').value = t.due || '';
+    $('#tRemind').value = t.remind || '';
     $('#tMinutes').value = t.minutes || '';
     $('#tNotes').value = t.notes || '';
     $$('#tPriority button').forEach((b) => b.classList.toggle('on', b.dataset.v === (t.priority || 'normal')));
@@ -296,10 +303,13 @@
       id: t.id,
       title: $('#tTitle').value.trim() || t.title,
       due: $('#tDue').value || '',
+      remind: ($('#tRemind').value || '').slice(0, 16),
       minutes: $('#tMinutes').value ? Number($('#tMinutes').value) : '',
       notes: $('#tNotes').value,
       priority: ($('#tPriority .on') || {}).dataset?.v || 'normal'
     };
+    if (upd.remind !== (t.remind || '')) t.reminded = '';
+    if (upd.remind && !upd.due) upd.due = upd.remind.slice(0, 10);
     Object.assign(t, upd);
     closeSheets(); render();
     if (isConnected()) { try { await api('updateTodo', { todo: upd }); render(); } catch (e) { toast(e.message); } }
@@ -443,7 +453,34 @@
     s.className = 'status' + (isConnected() ? ' ok' : '');
     s.textContent = isConnected() ? 'Connected to your Tempo brain.' : 'Not connected. Showing sample data.';
     $('#sDisconnect').hidden = !isConnected();
+    renderReminderStatus();
     openSheet('settings');
+  }
+
+  function renderReminderStatus() {
+    const box = $('#sReminders');
+    const r = isConnected() && state.data && state.data.reminders;
+    box.hidden = !isConnected();
+    if (!r) { $('#sRemText').textContent = 'Update your brain to get reminders (see SETUP, Part 6).'; $('#sRemTopic').hidden = true; $('#sRemTest').hidden = true; return; }
+    $('#sRemText').textContent = r.on
+      ? 'On. Reminders arrive in the free ntfy app. Subscribe to this topic there:'
+      : 'Off. In Apps Script, run setupReminders once (SETUP, Part 6).';
+    $('#sRemTopic').hidden = !r.topic;
+    $('#sRemTopicName').textContent = r.topic || '';
+    $('#sRemTest').hidden = !r.on;
+  }
+
+  async function copyTopic() {
+    const topic = $('#sRemTopicName').textContent;
+    try { await navigator.clipboard.writeText(topic); toast('Topic copied'); }
+    catch (e) { toast(topic); }
+  }
+
+  async function testReminder() {
+    const b = $('#sRemTest'); b.disabled = true;
+    try { await api('testReminder'); toast('Sent. Check your notifications.'); }
+    catch (e) { toast(e.message); }
+    finally { b.disabled = false; }
   }
 
   // Accepts the web app URL + app key, or an old-style connection code pasted anywhere.
@@ -534,6 +571,8 @@
     $('#openSettings').addEventListener('click', openSettings);
     $('#demoConnect').addEventListener('click', openSettings);
     $('#settingsForm').addEventListener('submit', saveSettings);
+    $('#sRemCopy').addEventListener('click', copyTopic);
+    $('#sRemTest').addEventListener('click', testReminder);
     $('#sDisconnect').addEventListener('click', () => {
       state.conn = null; state.data = null; store.del('conn'); store.del('snapshot');
       closeSheets(); render(); toast('Disconnected');

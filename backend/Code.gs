@@ -5,6 +5,8 @@
  * It receives what you say or type from the Tempo app (or the iPhone
  * Shortcut), asks Claude what to do, and then adds events to your
  * Google Calendar and keeps your to-do list in a private Google Sheet.
+ * It can also nudge your phone before events and when a task's reminder
+ * is due (run "setupReminders" once to turn that on).
  *
  * You only ever need to touch the SETTINGS section below.
  */
@@ -19,7 +21,16 @@ var DEFAULT_MODEL = 'claude-haiku-5-5';
 var API_URL = 'https://api.anthropic.com/v1/messages';
 var API_VERSION = '2026-10-21';
 var MAX_TOOL_ROUNDS = 8;
-var TODO_HEADERS = ['id', 'title', 'notes', 'due', 'priority', 'done', 'created', 'completed', 'parent', 'minutes'];
+var TODO_HEADERS = ['id', 'title', 'notes', 'due', 'priority', 'done', 'created', 'completed', 'parent', 'minutes', 'remind', 'reminded'];
+
+// Reminder defaults. Change them without touching code by adding Script
+// Properties with the same names (Project Settings → Script Properties):
+//   EVENT_REMINDER_MINUTES  minutes before each calendar event (0 = off)
+//   MORNING_HOUR            hour for the morning rundown, 0–23 ("off" = off)
+var DEFAULT_EVENT_REMINDER_MINUTES = 15;
+var DEFAULT_MORNING_HOUR = 8;
+var NTFY_SERVER = 'https://ntfy.sh';
+var DEFAULT_APP_URL = 'https://johnlkellyjr.github.io/tempo/';
 
 /* ═════════════════════════ One-time setup ═════════════════════════ */
 
@@ -55,9 +66,40 @@ function showAppKey() {
 /** Older name, kept so the old setup steps still work. */
 function connectionCode() { showAppKey(); }
 
+/**
+ * Run this ONCE to turn on reminders (select "setupReminders", then Run).
+ * It makes your private reminder channel, checks for reminders every
+ * 5 minutes, and sends a test notification.
+ */
+function setupReminders() {
+  var props = PropertiesService.getScriptProperties();
+  if (!props.getProperty('NTFY_TOPIC')) {
+    props.setProperty('NTFY_TOPIC', 'tempo-' + Utilities.getUuid().replace(/-/g, '').slice(0, 16));
+  }
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'sendReminders') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('sendReminders').timeBased().everyMinutes(5).create();
+  todoSheet_(); // adds the reminder columns to the Sheet if needed
+  notify_({ title: 'Tempo reminders are on', message: 'This is what a reminder looks like.', tags: ['bell'] });
+  Logger.log('✅ Reminders are on. In the ntfy app on your iPhone, tap +, and subscribe to this topic:');
+  Logger.log(props.getProperty('NTFY_TOPIC'));
+  Logger.log('Then: Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy.');
+}
+
+/** Run this to turn reminders off again. */
+function stopReminders() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'sendReminders') ScriptApp.deleteTrigger(t);
+  });
+  Logger.log('Reminders are off. Run setupReminders to turn them back on.');
+}
+
 /* ═════════════════════════ Web entry points ═════════════════════════ */
 
-function doGet() {
+function doGet(e) {
+  var p = (e && e.parameter) || {};
+  if (p.r) return HtmlService.createHtmlOutput('<p style="font:18px -apple-system,sans-serif;padding:24px">' + reminderAction_(p) + '</p>');
   return json_({ ok: true, app: 'Tempo', message: 'Tempo brain is running.' });
 }
 
@@ -67,6 +109,7 @@ function doPost(e) {
     if (!body.key || body.key !== secret_()) {
       return json_({ ok: false, error: 'Wrong app key. Check the App key in Tempo → Settings.' });
     }
+    rememberUrls_(body);
     var action = body.action || 'ask';
     switch (action) {
       case 'ping':
@@ -84,6 +127,10 @@ function doPost(e) {
       case 'deleteTodo':
         deleteTodo_(String(body.id || ''));
         return json_(snapshot_());
+      case 'testReminder':
+        if (!topic_()) return json_({ ok: false, error: 'Reminders are off. In Apps Script, run setupReminders once.' });
+        notify_({ title: 'Test from Tempo', message: 'Reminders are working.', tags: ['bell'] });
+        return json_({ ok: true });
       default:
         return json_({ ok: false, error: 'Unknown action: ' + action });
     }
@@ -100,7 +147,8 @@ function snapshot_() {
     timezone: tz_(),
     now: fmt_(now),
     events: weekEvents_(),
-    todos: listTodos_(true)
+    todos: listTodos_(true),
+    reminders: { on: !!topic_() && remindersScheduled_(), topic: topic_() || '' }
   };
 }
 
@@ -229,7 +277,7 @@ function contextFor_() {
   });
   lines.push('</his_calendar>', '<his_open_todos>');
   listTodos_(false).forEach(function (t) {
-    lines.push([t.title, t.due ? 'due ' + t.due : 'no due date', t.priority, t.parent ? 'step of ' + t.parent : '', 'id=' + t.id].filter(String).join(' | '));
+    lines.push([t.title, t.due ? 'due ' + t.due : 'no due date', t.remind ? 'reminder ' + t.remind : '', t.priority, t.parent ? 'step of ' + t.parent : '', 'id=' + t.id].filter(String).join(' | '));
   });
   lines.push('</his_open_todos>');
   return lines.join('\n');
@@ -250,7 +298,11 @@ function systemPrompt_() {
     '- When he asks to schedule something, check the calendar for that time first and avoid clashes. If there is a clash, pick the nearest free slot and tell him.',
     '- If he gives no time, choose a sensible one (study blocks in the afternoon or evening, not before 8am or after 11pm) and say what you chose.',
     '- Default event length is 1 hour unless he says otherwise or it is obviously different.',
-    '- "Remind me to…" or "I need to…" with no specific time means a to-do, not an event.',
+    '- "Remind me to…" or "I need to…" means a to-do, not an event.',
+    '- If he gives a time for the reminder ("remind me to call Mom at 5", "in 20 minutes", "tomorrow morning"), set remind_at on the to-do (and due to that day). His phone gets a notification then. "Morning" means 8:00, "afternoon" 14:00, "evening" 19:00, "tonight" 20:00.',
+    '- "Remind me 30 minutes before my dentist appointment" means a to-do (e.g. "Leave for dentist") with remind_at 30 minutes before that event starts.',
+    '- With no time, do not set remind_at. He gets a morning rundown of what is due anyway.',
+    eventLead_() ? '- He also gets a phone nudge ' + eventLead_() + ' minutes before each calendar event automatically; only add a reminder for an event if he asks for a different time.' : '- Automatic event nudges are off, so add a reminder to-do if he asks to be reminded about an event.',
     '- When he asks what to work on, look at his to-dos and today\'s free time and suggest one or two concrete next steps.',
     '- Only delete events or tasks when he clearly asks you to.',
     '- Times you send to tools are local times in ' + tz_() + ', formatted YYYY-MM-DDTHH:MM. Dates are YYYY-MM-DD.',
@@ -333,6 +385,7 @@ var TOOLS = [
         priority: { type: 'string', enum: ['high', 'normal', 'low'] },
         notes: { type: 'string' },
         minutes: { type: 'integer', description: 'Estimated minutes to finish' },
+        remind_at: { type: 'string', description: 'When to send a phone reminder, local YYYY-MM-DDTHH:MM. Only when he gives a time.' },
         parent_id: { type: 'string' }
       },
       required: ['title']
@@ -350,6 +403,7 @@ var TOOLS = [
         priority: { type: 'string', enum: ['high', 'normal', 'low'] },
         notes: { type: 'string' },
         minutes: { type: 'integer' },
+        remind_at: { type: 'string', description: 'Phone reminder time, local YYYY-MM-DDTHH:MM, or empty string to cancel' },
         done: { type: 'boolean' }
       },
       required: ['id']
@@ -393,12 +447,13 @@ function runTool_(name, input, changes) {
     case 'add_todo': {
       var t = addTodo_({
         title: input.title, due: input.due, priority: input.priority,
-        notes: input.notes, minutes: input.minutes, parent: input.parent_id
+        notes: input.notes, minutes: input.minutes, parent: input.parent_id, remind: input.remind_at
       });
-      changes.push({ type: 'todo', verb: 'added', title: t.title, when: t.due || '' });
+      changes.push({ type: 'todo', verb: 'added', title: t.title, when: t.remind ? 'reminder ' + niceTime_(t.remind) : (t.due || '') });
       return t;
     }
     case 'update_todo': {
+      if (input.remind_at != null) input.remind = input.remind_at;
       var u = updateTodo_(input);
       changes.push({ type: 'todo', verb: input.done ? 'completed' : 'updated', title: u.title, when: u.due || '' });
       return u;
@@ -508,8 +563,14 @@ function todoSheet_() {
     sh.getRange(1, 1, 1, TODO_HEADERS.length).setValues([TODO_HEADERS]).setFontWeight('bold');
     sh.setFrozenRows(1);
     sh.getRange('D:D').setNumberFormat('@'); // keep due dates as plain text
+    sh.getRange('K:L').setNumberFormat('@');
   }
   SHEET_ = ss.getSheetByName('todos');
+  // Older Sheets don't have the reminder columns yet: add their headers.
+  if (SHEET_.getRange(1, TODO_HEADERS.length).getValue() !== TODO_HEADERS[TODO_HEADERS.length - 1]) {
+    SHEET_.getRange(1, 1, 1, TODO_HEADERS.length).setValues([TODO_HEADERS]).setFontWeight('bold');
+    SHEET_.getRange('K:L').setNumberFormat('@'); // keep reminder times as plain text
+  }
   return SHEET_;
 }
 
@@ -530,7 +591,9 @@ function readTodos_() {
       created: String(r[6] || ''),
       completed: String(r[7] || ''),
       parent: String(r[8] || ''),
-      minutes: r[9] ? Number(r[9]) : null
+      minutes: r[9] ? Number(r[9]) : null,
+      remind: normDateTime_(r[10]),
+      reminded: normDateTime_(r[11])
     };
   }).filter(function (t) { return t.id; });
 }
@@ -556,8 +619,11 @@ function addTodo_(t) {
       created: fmt_(new Date()),
       completed: '',
       parent: t.parent || '',
-      minutes: t.minutes || ''
+      minutes: t.minutes || '',
+      remind: cleanRemind_(t.remind),
+      reminded: ''
     };
+    if (todo.remind && !todo.due) todo.due = todo.remind.slice(0, 10);
     todoSheet_().appendRow(TODO_HEADERS.map(function (h) { return todo[h]; }));
     return todo;
   } finally { lock.releaseLock(); }
@@ -570,6 +636,12 @@ function updateTodo_(t) {
     if (!todo) throw new Error('No to-do with id ' + t.id);
     ['title', 'notes', 'priority', 'minutes'].forEach(function (k) { if (t[k] != null) todo[k] = t[k]; });
     if (t.due != null) todo.due = String(t.due).slice(0, 10);
+    if (t.remind != null) {
+      var newRemind = cleanRemind_(t.remind);
+      if (newRemind !== todo.remind) todo.reminded = ''; // a new time means a new nudge
+      todo.remind = newRemind;
+      if (todo.remind && !todo.due) todo.due = todo.remind.slice(0, 10);
+    }
     if (t.done != null) {
       todo.done = !!t.done;
       todo.completed = t.done ? fmt_(new Date()) : '';
@@ -596,6 +668,165 @@ function deleteTodo_(id) {
   } finally { lock.releaseLock(); }
 }
 
+/* ═════════════════════════ Reminders ═════════════════════════ */
+// Notifications go through ntfy (ntfy.sh), a free push service with an
+// iPhone app. Your channel ("topic") is a long random name only you know.
+
+/** Runs every 5 minutes (setupReminders schedules it). */
+function sendReminders() {
+  if (!topic_()) return;
+  var now = new Date();
+  var props = PropertiesService.getScriptProperties();
+
+  // 1. To-dos whose reminder time has come.
+  var due = readTodos_().filter(function (t) { return !t.done && t.remind && !t.reminded && parseLocal_(t.remind) <= now; });
+  due.forEach(function (t) {
+    var late = now - parseLocal_(t.remind) > 6 * 3600000; // reminders were off for hours: don't send a pile of stale nudges
+    if (!late) {
+      notify_({
+        title: t.title,
+        message: t.notes || ('Reminder from Tempo' + (t.due && t.due > fmt_(now).slice(0, 10) ? ' · due ' + niceDay_(t.due) : '')),
+        tags: ['alarm_clock'],
+        priority: t.priority === 'high' ? 4 : 3,
+        actions: todoActions_(t.id)
+      });
+    }
+    var lock = LockService.getScriptLock(); lock.waitLock(10000);
+    try { todoSheet_().getRange(t.row, TODO_HEADERS.indexOf('reminded') + 1).setValue(fmt_(now)); }
+    finally { lock.releaseLock(); }
+  });
+
+  // 2. Calendar events starting soon.
+  var lead = eventLead_();
+  if (lead > 0) {
+    var sent = {};
+    try { sent = JSON.parse(props.getProperty('SENT_EVENTS') || '{}'); } catch (ignore) {}
+    var soon = listEvents_(now, new Date(now.getTime() + (lead + 1) * 60000));
+    soon.forEach(function (e) {
+      var start = parseLocal_(e.start);
+      var key = e.id + '@' + e.start;
+      if (e.all_day || start <= now || sent[key]) return;
+      var mins = Math.round((start - now) / 60000);
+      notify_({
+        title: e.title,
+        message: (mins <= 1 ? 'Starting now' : 'In ' + mins + ' min') + ' · ' + niceTime_(e.start).replace(/^\w+ /, '') + (e.location ? ' · ' + e.location : ''),
+        tags: ['calendar']
+      });
+      sent[key] = e.start;
+    });
+    var cutoff = fmt_(new Date(now.getTime() - 86400000));
+    Object.keys(sent).forEach(function (k) { if (sent[k] < cutoff) delete sent[k]; });
+    props.setProperty('SENT_EVENTS', JSON.stringify(sent));
+  }
+
+  // 3. Morning rundown, once a day.
+  var hour = morningHour_();
+  var today = fmt_(now).slice(0, 10);
+  var h = Number(Utilities.formatDate(now, tz_(), 'H'));
+  if (hour != null && h >= hour && h < hour + 3 && props.getProperty('LAST_MORNING') !== today) {
+    props.setProperty('LAST_MORNING', today);
+    var rundown = morningRundown_(today);
+    if (rundown) notify_({ title: 'Good morning', message: rundown, tags: ['sunrise'] });
+  }
+}
+
+function morningRundown_(today) {
+  var events = weekEvents_().filter(function (e) { return e.start.slice(0, 10) === today && !e.all_day; });
+  var open = listTodos_(false).filter(function (t) { return !t.parent; });
+  var dueToday = open.filter(function (t) { return t.due === today; });
+  var overdue = open.filter(function (t) { return t.due && t.due < today; });
+  var lines = [];
+  if (events.length) {
+    lines.push(events.length + (events.length === 1 ? ' event' : ' events') + ', first: ' + events[0].title + ' at ' + niceTime_(events[0].start).replace(/^\w+ /, '') + '.');
+  }
+  if (dueToday.length) lines.push('Due today: ' + dueToday.slice(0, 3).map(function (t) { return t.title; }).join(', ') + (dueToday.length > 3 ? ' +' + (dueToday.length - 3) + ' more' : '') + '.');
+  if (overdue.length) lines.push(overdue.length + ' overdue: ' + overdue[0].title + (overdue.length > 1 ? ' and more' : '') + '.');
+  return lines.join('\n');
+}
+
+function notify_(n) {
+  var payload = {
+    topic: topic_(),
+    title: n.title,
+    message: n.message || ' ',
+    tags: n.tags || [],
+    priority: n.priority || 3,
+    click: PropertiesService.getScriptProperties().getProperty('APP_URL') || DEFAULT_APP_URL
+  };
+  if (n.actions && n.actions.length) payload.actions = n.actions;
+  var resp = UrlFetchApp.fetch(NTFY_SERVER, {
+    method: 'post', contentType: 'application/json',
+    payload: JSON.stringify(payload), muteHttpExceptions: true
+  });
+  if (resp.getResponseCode() >= 300) Logger.log('ntfy said ' + resp.getResponseCode() + ': ' + resp.getContentText());
+}
+
+/** "Done" and "Snooze 1 hour" buttons on a to-do reminder. */
+function todoActions_(id) {
+  var url = PropertiesService.getScriptProperties().getProperty('WEB_APP_URL');
+  if (!url) return [];
+  var link = function (r) { return url + '?r=' + r + '&id=' + encodeURIComponent(id) + '&sig=' + sign_(r + ':' + id); };
+  return [
+    { action: 'http', label: 'Done', url: link('done'), method: 'GET', clear: true },
+    { action: 'http', label: 'Snooze 1 hr', url: link('snooze'), method: 'GET', clear: true }
+  ];
+}
+
+function reminderAction_(p) {
+  var id = String(p.id || '');
+  if (p.sig !== sign_(p.r + ':' + id)) return 'That link is not valid.';
+  if (p.r === 'done') { var t = updateTodo_({ id: id, done: true }); return '✅ Done: ' + t.title; }
+  if (p.r === 'snooze') {
+    var later = fmt_(new Date(Date.now() + 3600000));
+    var s = updateTodo_({ id: id, remind: later });
+    return '😴 I\'ll remind you again at ' + niceTime_(later).replace(/^\w+ /, '') + ': ' + s.title;
+  }
+  return 'Unknown action.';
+}
+
+/** The app tells the brain its own address, so reminder buttons and taps know where to go. */
+function rememberUrls_(body) {
+  var props = PropertiesService.getScriptProperties();
+  if (typeof body.url === 'string' && /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(body.url) && props.getProperty('WEB_APP_URL') !== body.url) {
+    props.setProperty('WEB_APP_URL', body.url);
+  }
+  if (typeof body.appUrl === 'string' && /^https:\/\/[^\s]+$/.test(body.appUrl) && props.getProperty('APP_URL') !== body.appUrl) {
+    props.setProperty('APP_URL', body.appUrl);
+  }
+}
+
+function sign_(text) {
+  var raw = Utilities.computeHmacSha256Signature(text, secret_());
+  return Utilities.base64EncodeWebSafe(raw).replace(/=+$/, '').slice(0, 22);
+}
+
+function topic_() { return PropertiesService.getScriptProperties().getProperty('NTFY_TOPIC'); }
+
+function remindersScheduled_() {
+  return ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'sendReminders'; });
+}
+
+function eventLead_() {
+  var v = PropertiesService.getScriptProperties().getProperty('EVENT_REMINDER_MINUTES');
+  var n = v == null || v === '' ? DEFAULT_EVENT_REMINDER_MINUTES : Number(v);
+  return isNaN(n) || n < 0 ? 0 : Math.min(n, 240);
+}
+
+function morningHour_() {
+  var v = PropertiesService.getScriptProperties().getProperty('MORNING_HOUR');
+  if (v == null || v === '') return DEFAULT_MORNING_HOUR;
+  var n = Number(v);
+  return isNaN(n) || n < 0 || n > 23 ? null : n;
+}
+
+function cleanRemind_(v) {
+  if (v == null || v === '') return '';
+  return fmt_(parseLocal_(v));
+}
+
+function niceTime_(s) { return Utilities.formatDate(parseLocal_(s), tz_(), 'EEE h:mm a'); }
+function niceDay_(s) { return Utilities.formatDate(parseLocal_(s), tz_(), 'EEE MMM d'); }
+
 /* ═════════════════════════ Helpers ═════════════════════════ */
 
 function secret_() {
@@ -620,6 +851,12 @@ function normDate_(v) {
   if (!v) return '';
   if (Object.prototype.toString.call(v) === '[object Date]') return Utilities.formatDate(v, tz_(), 'yyyy-MM-dd');
   return String(v).slice(0, 10);
+}
+
+function normDateTime_(v) {
+  if (!v) return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') return fmt_(v);
+  return String(v).slice(0, 16);
 }
 
 function alternate_(msgs) {

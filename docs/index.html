@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=3">
+  <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
   <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
@@ -123,6 +123,7 @@
     <form id="taskForm" class="form">
       <input id="tTitle" class="title-input" aria-label="Task title" required>
       <label class="field"><span>Due</span><input type="date" id="tDue"></label>
+      <label class="field"><span>Remind me</span><input type="datetime-local" id="tRemind"></label>
       <div class="field"><span>Priority</span>
         <div class="choice" id="tPriority">
           <button type="button" data-v="low">Low</button>
@@ -156,16 +157,25 @@
         <input id="sKey" placeholder="From Apps Script → showAppKey" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off">
       </label>
       <p class="status" id="sStatus"></p>
+      <div class="field stack reminders" id="sReminders" hidden>
+        <span>Reminders</span>
+        <p class="rem-text" id="sRemText"></p>
+        <div class="rem-topic" id="sRemTopic" hidden>
+          <code id="sRemTopicName"></code>
+          <button type="button" class="ghost-btn small" id="sRemCopy">Copy</button>
+        </div>
+        <button type="button" class="ghost-btn small" id="sRemTest" hidden>Send a test reminder</button>
+      </div>
       <div class="row-btns">
         <button type="button" class="ghost-btn" id="sDisconnect">Use sample data</button>
         <button type="submit" class="primary-btn">Save &amp; connect</button>
       </div>
-      <p class="fine">Tempo talks only to your own Google Apps Script. Your web app URL and app key stay on this device. <span class="ver">Version 3</span></p>
+      <p class="fine">Tempo talks only to your own Google Apps Script. Your web app URL and app key stay on this device. <span class="ver">Version 4</span></p>
     </form>
   </section>
 
   <div class="toast" id="toast" role="status" hidden></div>
 
-  <script src="app.js?v=3"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>
