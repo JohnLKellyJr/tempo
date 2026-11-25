@@ -343,16 +343,17 @@
     const today = dayKey(new Date());
     const weekEnd = dayKey(addDays(new Date(), 7));
     const open = topLevel(d.todos.filter((t) => !t.done)).sort(taskOrder);
+    // Each group is its own colored panel, like the sections on Today.
     const groups = [
-      ['Overdue', open.filter((t) => t.due && t.due < today)],
-      ['Today', open.filter((t) => t.due === today)],
-      ['This week', open.filter((t) => t.due > today && t.due <= weekEnd)],
-      ['Later', open.filter((t) => t.due > weekEnd)],
-      ['Anytime', open.filter((t) => !t.due)],
-      ['Done', topLevel(d.todos.filter((t) => t.done))]
+      ['Overdue', 'p-overdue', open.filter((t) => t.due && t.due < today)],
+      ['Today', 'p-next', open.filter((t) => t.due === today)],
+      ['This week', 'p-break', open.filter((t) => t.due > today && t.due <= weekEnd)],
+      ['Later', 'p-focus', open.filter((t) => t.due > weekEnd)],
+      ['Anytime', 'p-anytime', open.filter((t) => !t.due)],
+      ['Done', 'p-done', topLevel(d.todos.filter((t) => t.done))]
     ];
-    const html = groups.filter(([, l]) => l.length).map(([name, l]) =>
-      `<h3 class="group-title">${name} <span class="count">${l.length}</span></h3><ul class="task-list">${l.map((t) => taskHTML(t, d.todos)).join('')}</ul>`).join('');
+    const html = groups.filter(([, , l]) => l.length).map(([name, cls, l]) =>
+      `<section class="panel ${cls}"><header class="panel-head"><span class="panel-dot" aria-hidden="true"></span><h2>${name} <span class="count">${l.length}</span></h2></header><ul class="task-list">${l.map((t) => taskHTML(t, d.todos)).join('')}</ul></section>`).join('');
     $('#taskGroups').innerHTML = html || `<p class="empty-note">No tasks yet. Add one above, or just tell Tempo.</p>`;
   }
 
