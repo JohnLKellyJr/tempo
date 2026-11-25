@@ -219,7 +219,7 @@
     if (!list.length && all.length) { skipped.clear(); list = all; }
     const c = list[0];
     if (!c) {
-      box.className = 'card next-step empty';
+      box.className = 'next-step empty';
       box.innerHTML = `<h3>Nothing waiting on you.</h3><p class="ns-sub">Enjoy it, or tell Tempo what’s next.</p>`;
       return;
     }
@@ -228,7 +228,7 @@
       ? `Step ${c.n} of ${c.of} · ${esc(c.parent.title)}`
       : c.allSteps ? 'All the steps are done. Finish it off.' : t.minutes ? `About ${minText(t.minutes)}` : '';
     const big = !c.parent && !c.allSteps && (t.minutes ? t.minutes >= 30 : t.priority === 'high');
-    box.className = 'card next-step' + (state.pinned === t.id ? ' started' : '');
+    box.className = 'next-step' + (state.pinned === t.id ? ' started' : '');
     box.dataset.id = t.id;
     box.innerHTML = `
       ${state.pinned === t.id ? '<p class="ns-kicker">You’re on it</p>' : ''}

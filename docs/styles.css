@@ -211,7 +211,7 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .steps-toggle svg { width: 16px; height: 16px; stroke-width: 2.2; }
 
 /* Done today */
-.section-head h2 .count { margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); letter-spacing: 0; }
+.section-head h2 .count, .panel-head h2 .count { margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); letter-spacing: 0; }
 .done-list { padding: 6px 16px; }
 .done-list ul { list-style: none; margin: 0; padding: 0; }
 .done-list li { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
@@ -324,3 +324,26 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .primary-btn.small { padding: 10px 12px; border-radius: 12px; font-size: 15px; }
 .ghost-btn.small { padding: 8px 12px; border-radius: 12px; font-size: 14px; background: var(--surface); }
 .field > span { white-space: nowrap; }
+
+/* Home sections: each one is its own tinted, bordered panel */
+.panel { --tint: var(--accent); position: relative; margin-top: 16px; padding: 14px 14px 16px; border-radius: 24px; overflow: hidden;
+  background: color-mix(in srgb, var(--tint) 6%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--tint) 30%, var(--line));
+  box-shadow: var(--shadow); backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4); }
+.panel::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--tint); opacity: .85; }
+.hero + .panel { margin-top: 18px; }
+.panel-head { display: flex; align-items: center; gap: 10px; margin: 2px 2px 12px; }
+.panel-head h2 { flex: 1; margin: 0; font-size: 16px; font-weight: 650; letter-spacing: -.01em; }
+.panel-head h2 .count { background: color-mix(in srgb, var(--tint) 16%, transparent); color: var(--tint); }
+.panel-ico { flex: none; width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; color: var(--tint); background: color-mix(in srgb, var(--tint) 15%, transparent); }
+.panel-ico svg { width: 17px; height: 17px; stroke-width: 2; }
+.panel .next-step { padding: 2px 4px 0; }
+.panel .next-step.started { box-shadow: none; }
+.panel .next-step.flash { animation: none; }
+.panel:has(.next-step.flash) { animation: flash 1s ease-out; }
+.panel .breaker { padding: 0 2px; }
+.panel .done-list { padding: 0 4px; }
+.panel .task { background: var(--surface-solid); border-color: var(--line); }
+.panel .task.sub { background: color-mix(in srgb, var(--surface-solid) 70%, transparent); }
+.panel .breaker-form { background: var(--surface-solid); }
+.panel .empty-note { padding: 10px 4px; }
