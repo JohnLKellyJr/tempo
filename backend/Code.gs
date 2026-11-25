@@ -146,7 +146,6 @@ function snapshot_() {
     events: weekEvents_(),
     todos: all.filter(function (t) { return !t.done || t.completed >= weekAgo; })
       .map(function (t) { delete t.row; return t; }),
-    wins: winsHistory_(all),
     reminders: {
       on: remindersScheduled_() && pushSubs_().length > 0,
       scheduled: remindersScheduled_(),
@@ -154,21 +153,6 @@ function snapshot_() {
       vapidKey: vapidKeys_().publicKey
     }
   };
-}
-
-/**
- * How many tasks and steps were finished each day, for the last 90 days.
- * The app uses this for the Wins section (this week and the daily streak).
- */
-function winsHistory_(todos) {
-  var since = fmt_(new Date(Date.now() - 90 * 86400000)).slice(0, 10);
-  var days = {};
-  todos.forEach(function (t) {
-    if (!t.done || !t.completed) return;
-    var day = String(t.completed).slice(0, 10);
-    if (day >= since) days[day] = (days[day] || 0) + 1;
-  });
-  return { days: days };
 }
 
 /**

@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
   <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
@@ -69,8 +69,8 @@
         <div class="breaker-picks" id="breakPicks"></div>
       </article>
 
-      <div class="section-head"><h2>Wins</h2></div>
-      <article class="card wins" id="wins"></article>
+      <div class="section-head"><h2 id="doneTitle">Done today</h2></div>
+      <article class="card done-list" id="doneList"></article>
     </section>
 
     <section class="view" id="view-tasks" hidden>
@@ -84,6 +84,16 @@
 
     <div class="dock-spacer"></div>
   </main>
+
+  <!-- Momentum nudge: offered right after a check-off -->
+  <aside class="nudge card" id="nudge" hidden aria-live="polite">
+    <p class="nudge-kicker" id="nudgeKicker"></p>
+    <p class="nudge-title" id="nudgeTitle"></p>
+    <div class="nudge-btns">
+      <button class="ns-done" id="nudgeGo">Let’s go</button>
+      <button class="ns-skip" id="nudgeLater">I’ll stop here</button>
+    </div>
+  </aside>
 
   <!-- Reply card -->
   <aside class="reply card" id="reply" hidden aria-live="polite">
@@ -177,12 +187,12 @@
         <button type="button" class="ghost-btn" id="sDisconnect">Use sample data</button>
         <button type="submit" class="primary-btn">Save &amp; connect</button>
       </div>
-      <p class="fine">Tempo talks only to your own Google Apps Script. Your web app URL and app key stay on this device. <span class="ver">Version 6</span></p>
+      <p class="fine">Tempo talks only to your own Google Apps Script. Your web app URL and app key stay on this device. <span class="ver">Version 7</span></p>
     </form>
   </section>
 
   <div class="toast" id="toast" role="status" hidden></div>
 
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

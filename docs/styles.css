@@ -193,29 +193,42 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .pick-title { flex: 1; min-width: 0; font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pick-meta { flex: none; font-size: 12.5px; color: var(--text-3); }
 
-/* Wins */
-.wins { padding: 18px; }
-.wins.pop { animation: pop .5s cubic-bezier(.2, .9, .2, 1.4); }
-@keyframes pop { 40% { transform: scale(1.025); } }
-@media (prefers-reduced-motion: reduce) { .wins.pop { animation: none; } }
-.win-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.stat { text-align: center; }
-.stat b { display: block; font-family: var(--serif); font-weight: 400; font-size: 40px; line-height: 1; font-variant-numeric: tabular-nums; }
-.stat:first-child b { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.stat span { display: block; margin-top: 4px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); font-weight: 600; }
-.win-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin: 18px 0 0; }
-.wd { display: flex; flex-direction: column; align-items: center; gap: 5px; }
-.wd i { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); border: 1.5px solid var(--line); }
-.wd i svg { width: 14px; height: 14px; stroke-width: 2.6; color: #fff; }
-.wd.on i { background: var(--grad); border-color: transparent; }
-.wd.today i { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--accent); }
-.wd span { font-size: 11px; font-weight: 600; color: var(--text-3); }
-.wd.today span { color: var(--accent); }
-.win-line { margin: 16px 0 0; text-align: center; color: var(--text-2); font-size: 14.5px; }
-.win-recent { list-style: none; margin: 14px 0 0; padding: 12px 0 0; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
-.win-recent li { display: flex; align-items: center; gap: 10px; font-size: 14.5px; color: var(--text-2); }
-.win-recent li svg { width: 16px; height: 16px; flex: none; stroke-width: 2.4; color: var(--good); }
-.win-recent li span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Progress bars on tasks with steps */
+.progress { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.progress .bar { flex: 1; height: 6px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
+.progress .bar i { display: block; height: 100%; border-radius: inherit; background: var(--grad); transition: width .5s cubic-bezier(.2, .9, .2, 1); }
+.progress span { flex: none; font-size: 12.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.progress.full span { color: var(--good); font-weight: 600; }
+.next-step .progress { margin-top: 12px; }
+.next-step .ns-kicker { margin: 0 0 6px; font-size: 12px; font-weight: 650; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+.next-step.started { box-shadow: 0 0 0 1.5px var(--accent), var(--shadow); }
+.next-step.flash { animation: flash 1s ease-out; }
+@keyframes flash { 0% { box-shadow: 0 0 0 6px var(--accent-soft), var(--shadow); } }
+
+/* Show more / Show less for steps */
+.steps-toggle { margin-left: 26px; }
+.steps-toggle button { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px; color: var(--accent); font-weight: 600; font-size: 13.5px; }
+.steps-toggle svg { width: 16px; height: 16px; stroke-width: 2.2; }
+
+/* Done today */
+.section-head h2 .count { margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); letter-spacing: 0; }
+.done-list { padding: 6px 16px; }
+.done-list ul { list-style: none; margin: 0; padding: 0; }
+.done-list li { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.done-list li:last-child { border-bottom: 0; }
+.done-list li > svg { flex: none; width: 22px; height: 22px; padding: 4px; border-radius: 50%; background: var(--grad); color: #fff; stroke-width: 2.8; }
+.done-list li > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.dl-title { font-size: 15px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl-sub { font-size: 12.5px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.done-list time { flex: none; font-size: 12.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.done-empty { margin: 0; padding: 12px 0; color: var(--text-2); font-size: 14.5px; text-align: center; }
+.more-btn { display: block; width: 100%; padding: 10px 0 12px; color: var(--accent); font-weight: 600; font-size: 14px; border-top: 1px solid var(--line); }
+
+/* Momentum nudge */
+.nudge { position: fixed; z-index: 19; left: 14px; right: 14px; bottom: calc(var(--safe-b) + 104px); max-width: 532px; margin: 0 auto; padding: 16px; background: var(--surface-solid); box-shadow: var(--shadow-lg); animation: rise .4s cubic-bezier(.2, .9, .2, 1); }
+.nudge-kicker { margin: 0; font-size: 13.5px; color: var(--text-2); }
+.nudge-title { margin: 4px 0 0; font-size: 18px; font-weight: 650; letter-spacing: -.01em; line-height: 1.25; }
+.nudge-btns { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
 
 /* Dock / composer */
 .dock-spacer { height: calc(150px + var(--safe-b)); }

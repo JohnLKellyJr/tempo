@@ -19,6 +19,9 @@
     data: store.get('snapshot', null),      // { events, todos, now }
     history: store.get('history', []),      // [{ role, text }]
     view: store.get('view', 'today'),
+    expanded: store.get('expanded', []),   // task ids whose steps are unfolded
+    pinned: null,                          // step picked from the momentum nudge
+    doneOpen: false,
     editing: null
   };
 
@@ -67,7 +70,6 @@
         ev('s7', 'Bio midterm', 3, '10:00', '11:30', 'School', '#3b82f6'),
         ev('s8', 'Dinner with family', 4, '18:30', '20:30', 'Personal', '#a78bfa')
       ],
-      wins: { days: { [k(-1)]: 4, [k(-2)]: 2, [k(-3)]: 3, [k(-4)]: 1, [k(-6)]: 2, [k(-7)]: 1 } },
       todos: [
         { id: 'w1', title: 'Email TA about lab partner', due: k(-1), priority: 'normal', done: true, minutes: 5, parent: '', notes: '', completed: k(-1) + 'T15:10' },
         { id: 'w2', title: 'Print the reading', due: k(-1), priority: 'normal', done: true, minutes: 5, parent: '', notes: '', completed: k(-1) + 'T18:40' },
@@ -112,7 +114,7 @@
     }
     if (!json.ok) throw new Error(json.error || 'Something went wrong');
     if (json.events && json.todos) {
-      state.data = { events: json.events, todos: json.todos, now: json.now, reminders: json.reminders || null, wins: json.wins || null };
+      state.data = { events: json.events, todos: json.todos, now: json.now, reminders: json.reminders || null };
       store.set('snapshot', state.data);
     }
     return json;
@@ -181,21 +183,33 @@
 
     renderNextStep(d);
     renderBreaker(d);
-    renderWins(d);
+    renderDone(d);
   }
 
   // ───────────── Do this next: one small step, nothing else ─────────────
   // Walk the tasks in focus order. A task with steps offers its first
-  // unfinished step; a task without steps offers itself.
+  // unfinished step; a task without steps offers itself. A step picked from
+  // the momentum nudge ("Let's go") goes to the front.
   const skipped = new Set();
+  const stepsOf = (d, id) => d.todos.filter((s) => s.parent === id);
+  function candidateFor(d, t) {
+    if (t.parent) {
+      const parent = d.todos.find((p) => p.id === t.parent);
+      const subs = stepsOf(d, t.parent);
+      return { todo: t, parent, n: subs.indexOf(t) + 1, of: subs.length, doneCount: subs.filter((x) => x.done).length };
+    }
+    const subs = stepsOf(d, t.id);
+    const openSub = subs.find((x) => !x.done);
+    if (openSub) return candidateFor(d, openSub);
+    return { todo: t, parent: null, allSteps: subs.length };
+  }
   function nextCandidates(d) {
-    const out = [];
-    topLevel(d.todos.filter((t) => !t.done)).sort(taskOrder).forEach((t) => {
-      const subs = d.todos.filter((s) => s.parent === t.id);
-      const openSubs = subs.filter((s) => !s.done);
-      if (openSubs.length) out.push({ todo: openSubs[0], parent: t, n: subs.length - openSubs.length + 1, of: subs.length });
-      else out.push({ todo: t, parent: null, allSteps: subs.length });
-    });
+    const out = topLevel(d.todos.filter((t) => !t.done)).sort(taskOrder).map((t) => candidateFor(d, t));
+    const pin = state.pinned && d.todos.find((t) => t.id === state.pinned && !t.done);
+    if (pin) {
+      const c = candidateFor(d, pin);
+      return [c].concat(out.filter((o) => o.todo.id !== c.todo.id));
+    }
     return out;
   }
   function renderNextStep(d) {
@@ -214,17 +228,24 @@
       ? `Step ${c.n} of ${c.of} · ${esc(c.parent.title)}`
       : c.allSteps ? 'All the steps are done. Finish it off.' : t.minutes ? `About ${minText(t.minutes)}` : '';
     const big = !c.parent && !c.allSteps && (t.minutes ? t.minutes >= 30 : t.priority === 'high');
-    box.className = 'card next-step';
+    box.className = 'card next-step' + (state.pinned === t.id ? ' started' : '');
     box.dataset.id = t.id;
     box.innerHTML = `
+      ${state.pinned === t.id ? '<p class="ns-kicker">You’re on it</p>' : ''}
       <h3>${esc(t.title)}</h3>
       ${sub ? `<p class="ns-sub">${sub}</p>` : ''}
+      ${c.parent ? progressHTML(c.doneCount, c.of) : ''}
       ${big ? '<p class="ns-hint">Feels like a lot? Break it into tiny steps first.</p>' : ''}
       <div class="ns-btns">
         <button class="ns-done" data-ns="done">${CHECK_SVG}<span>Done</span></button>
         ${big ? '<button class="ns-alt" data-ns="break"><span class="spark" aria-hidden="true"></span>Break it down</button>' : ''}
         ${list.length > 1 ? '<button class="ns-skip" data-ns="skip">Not now</button>' : ''}
       </div>`;
+  }
+  function progressHTML(done, of) {
+    const pct = of ? Math.round((done / of) * 100) : 0;
+    return `<div class="progress${done === of ? ' full' : ''}" role="progressbar" aria-valuemin="0" aria-valuemax="${of}" aria-valuenow="${done}" aria-label="${done} of ${of} steps done">
+      <div class="bar"><i style="width:${pct}%"></i></div><span>${done} of ${of} steps</span></div>`;
   }
   const minText = (m) => (m < 60 ? `${m} min` : `${(m / 60).toFixed(m % 60 ? 1 : 0)} hr`);
 
@@ -247,51 +268,29 @@
     ask(`I need to: ${title}. Add it as a task and break it into small steps as sub-tasks.`);
   }
 
-  // ───────────── Wins: real counts of what got checked off ─────────────
-  // Every finished task or step is one win. Today is counted from the task
-  // list on this device, so a check-off shows up instantly. Earlier days come
-  // from the brain's history (wins.days), or from the past week's finished
-  // tasks if the brain hasn't been updated yet.
-  function winsByDay(d) {
-    const local = {};
-    d.todos.forEach((t) => {
-      if (!t.done || !t.completed) return;
-      const k = t.completed.slice(0, 10);
-      local[k] = (local[k] || 0) + 1;
-    });
-    if (!(d.wins && d.wins.days)) return local;
-    const today = dayKey(new Date());
-    const days = Object.assign({}, d.wins.days);
-    days[today] = local[today] || 0;
-    return days;
+  // ───────────── Done today: proof of what actually got finished ─────────────
+  const DONE_PREVIEW = 5;
+  function doneOn(d, day) {
+    return d.todos.filter((t) => t.done && t.completed && t.completed.slice(0, 10) === day)
+      .sort((a, b) => b.completed.localeCompare(a.completed));
   }
-  function renderWins(d) {
-    const days = winsByDay(d);
-    const now = new Date(), today = dayKey(now);
-    const todayCount = days[today] || 0;
-    // The last 7 days, ending today (a rolling week, so Mondays don't reset to 0).
-    const week = [6, 5, 4, 3, 2, 1, 0].map((i) => { const day = addDays(now, -i); const k = dayKey(day); return { k, n: days[k] || 0, label: WD[day.getDay()][0] }; });
-    const weekCount = week.reduce((a, w) => a + w.n, 0);
-    // Streak: days in a row with at least one win. Today still counts as
-    // "in progress", so the streak doesn't drop to 0 first thing in the morning.
-    let streak = 0, day = todayCount ? now : addDays(now, -1);
-    while (days[dayKey(day)]) { streak++; day = addDays(day, -1); }
-    const recent = d.todos.filter((t) => t.done && t.completed && t.completed.slice(0, 10) === today)
-      .sort((a, b) => b.completed.localeCompare(a.completed)).slice(0, 3);
-    const line = todayCount === 0
-      ? (streak ? `Your ${streak}-day streak is waiting. One small step keeps it going.` : 'Your first win today is one tap away.')
-      : todayCount < 3 ? 'Nice start. Small steps count too.' : todayCount < 6 ? 'You’re on a roll.' : 'Huge day. Be proud of this.';
-    $('#wins').innerHTML = `
-      <div class="win-stats">
-        <div class="stat"><b>${todayCount}</b><span>today</span></div>
-        <div class="stat"><b>${weekCount}</b><span>last 7 days</span></div>
-        <div class="stat"><b>${streak}</b><span>day streak</span></div>
-      </div>
-      <div class="win-week" aria-label="Days with wins this week">
-        ${week.map((w) => `<div class="wd ${w.n ? 'on' : ''} ${w.k === today ? 'today' : ''}"><i>${w.n ? CHECK_SVG : ''}</i><span>${w.label}</span></div>`).join('')}
-      </div>
-      <p class="win-line">${line}</p>
-      ${recent.length ? `<ul class="win-recent">${recent.map((t) => `<li>${CHECK_SVG}<span>${esc(t.title)}</span></li>`).join('')}</ul>` : ''}`;
+  function renderDone(d) {
+    const today = dayKey(new Date());
+    const list = doneOn(d, today);
+    $('#doneTitle').innerHTML = `Done today${list.length ? ` <span class="count">${list.length}</span>` : ''}`;
+    const box = $('#doneList');
+    if (!list.length) {
+      const y = doneOn(d, dayKey(addDays(new Date(), -1))).length;
+      box.innerHTML = `<p class="done-empty">${y ? `Nothing yet today. Yesterday you finished ${y} ${y === 1 ? 'thing' : 'things'}, so you know you can.` : 'What you finish today lands here.'}</p>`;
+      return;
+    }
+    const open = !!state.doneOpen;
+    const shown = open ? list : list.slice(0, DONE_PREVIEW);
+    box.innerHTML = `<ul>${shown.map((t) => {
+      const parent = t.parent && d.todos.find((p) => p.id === t.parent);
+      return `<li>${CHECK_SVG}<div><span class="dl-title">${esc(t.title)}</span>${parent ? `<span class="dl-sub">Step of ${esc(parent.title)}</span>` : ''}</div><time>${esc(timeFull(parse(t.completed)))}</time></li>`;
+    }).join('')}</ul>
+      ${list.length > DONE_PREVIEW ? `<button class="more-btn" data-done-more>${open ? 'Show less' : `Show ${list.length - DONE_PREVIEW} more`}</button>` : ''}`;
   }
 
   const topLevel = (list) => list.filter((t) => !t.parent);
@@ -317,13 +316,25 @@
     }
     if (t.priority === 'high' && !t.done) tags.push('<span class="tag high">Priority</span>');
     if (t.minutes) tags.push(`<span class="tag">${t.minutes < 60 ? t.minutes + ' min' : (t.minutes / 60).toFixed(t.minutes % 60 ? 1 : 0) + ' hr'}</span>`);
-    const subs = all.filter((s) => s.parent === t.id);
-    if (subs.length) tags.push(`<span class="tag">${subs.filter((s) => s.done).length}/${subs.length} steps</span>`);
+    const subs = isSub ? [] : all.filter((s) => s.parent === t.id);
+    const doneSubs = subs.filter((s) => s.done).length;
     let html = `<li class="task ${t.done ? 'done' : ''} ${isSub ? 'sub' : ''}" data-id="${esc(t.id)}">
       <button class="check ${t.done ? 'on' : ''} ${t.priority === 'high' ? 'pri-high' : ''}" data-act="toggle" aria-label="${t.done ? 'Mark not done' : 'Mark done'}">${CHECK_SVG}</button>
-      <button class="t-body" data-act="edit"><div class="t-title">${esc(t.title)}</div>${tags.length ? `<div class="t-meta">${tags.join('')}</div>` : ''}</button>
+      <button class="t-body" data-act="edit"><div class="t-title">${esc(t.title)}</div>${tags.length ? `<div class="t-meta">${tags.join('')}</div>` : ''}${subs.length ? progressHTML(doneSubs, subs.length) : ''}</button>
     </li>`;
-    if (!isSub) subs.sort((a, b) => Number(a.done) - Number(b.done)).forEach((s) => { html += taskHTML(s, all, true); });
+    if (!subs.length) return html;
+    // Steps stay in the order Tempo made them. Folded, only the next
+    // unfinished step shows; "Show all" opens the rest.
+    const expanded = state.expanded.includes(t.id);
+    const nextOpen = subs.find((s) => !s.done);
+    const visible = expanded ? subs : (t.done || !nextOpen ? [] : [nextOpen]);
+    visible.forEach((s) => { html += taskHTML(s, all, true); });
+    const hidden = subs.length - visible.length;
+    if (expanded || hidden) {
+      html += `<li class="steps-toggle"><button data-steps="${esc(t.id)}" aria-expanded="${expanded}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${expanded ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6'}"/></svg>
+        ${expanded ? 'Show less' : visible.length ? `Show all ${subs.length} steps` : `Show ${subs.length} steps`}</button></li>`;
+    }
     return html;
   }
 
@@ -367,7 +378,7 @@
     const check = li && li.querySelector('.check');
     if (check) check.classList.toggle('on', done);
     if (li) li.classList.toggle('done', done);
-    if (done) celebrate(t);
+    if (done) nudge(t);
     setTimeout(render, 380);
     if (isConnected()) {
       try { await api('updateTodo', { todo: { id, done } }); render(); }
@@ -375,18 +386,54 @@
     }
   }
 
-  // A little cheer for every win, with the real count for today.
-  const CHEERS = ['Nice!', 'Done!', 'Look at you.', 'One less thing.', 'That counts.', 'Boom.', 'Yes!'];
-  function celebrate(t) {
+  // ───────────── Momentum nudge ─────────────
+  // Right after a check-off, while it feels good, offer the next tiny step.
+  const CHEERS = ['Nice!', 'Done!', 'Look at you.', 'One less thing.', 'That counts.', 'Yes!'];
+  let nudgeNext = null;
+  function nudge(t) {
     const d = data();
-    const n = winsByDay(d)[dayKey(new Date())] || 1;
-    let msg = `${CHEERS[Math.floor(Math.random() * CHEERS.length)]} ${n} ${n === 1 ? 'win' : 'wins'} today.`;
+    if (state.pinned === t.id) state.pinned = null;
+    const cheer = CHEERS[Math.floor(Math.random() * CHEERS.length)];
+    let next = null, kicker, title;
     if (t.parent) {
-      const sibs = d.todos.filter((s) => s.parent === t.parent);
-      if (sibs.every((s) => s.done)) msg = 'Every step done! Check off the whole task.';
+      const sibs = stepsOf(d, t.parent);
+      const parent = d.todos.find((p) => p.id === t.parent);
+      next = sibs.find((s) => !s.done);
+      if (!next && parent && !parent.done) {
+        next = parent;
+        kicker = `${cheer} Every step is done.`;
+        title = `Check off “${parent.title}” too?`;
+      } else if (next) {
+        kicker = `${cheer} ${sibs.filter((s) => s.done).length} of ${sibs.length} done. While you’re rolling:`;
+      }
     }
-    toast(msg);
-    const w = $('#wins'); w.classList.remove('pop'); void w.offsetWidth; w.classList.add('pop');
+    if (!next) {
+      const c = nextCandidates(d).find((x) => x.todo.id !== t.id);
+      if (c) { next = c.todo; kicker = `${cheer} Keep the momentum? Next up:`; }
+    }
+    if (!next) { toast(`${cheer} That’s everything on your list.`); return; }
+    nudgeNext = next;
+    $('#nudgeKicker').textContent = kicker;
+    $('#nudgeTitle').textContent = title || (next.title + (next.minutes ? ` · ${minText(next.minutes)}` : ''));
+    $('#nudgeGo').textContent = next === d.todos.find((p) => p.id === t.parent) ? 'Check it off' : 'Let’s go';
+    $('#reply').hidden = true;
+    const box = $('#nudge');
+    box.hidden = false;
+    box.style.animation = 'none'; void box.offsetWidth; box.style.animation = '';
+    clearTimeout(nudge._t);
+    nudge._t = setTimeout(hideNudge, 15000);
+  }
+  function hideNudge() { $('#nudge').hidden = true; clearTimeout(nudge._t); }
+  function nudgeGo() {
+    const n = nudgeNext; hideNudge(); if (!n) return;
+    const d = data();
+    const isParentFinish = !n.parent && stepsOf(d, n.id).length && stepsOf(d, n.id).every((s) => s.done);
+    if (isParentFinish) { toggleTodo(n.id, null); return; }
+    state.pinned = n.id; skipped.delete(n.id);
+    setView('today'); render();
+    const card = $('#nextStep');
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.remove('flash'); void card.offsetWidth; card.classList.add('flash');
   }
 
   function openTask(id) {
@@ -731,6 +778,18 @@
       e.preventDefault();
       const input = $('#breakInput'); const v = input.value.trim(); if (!v) return;
       input.value = ''; input.blur(); breakNew(v);
+    });
+
+    $('#nudgeGo').addEventListener('click', nudgeGo);
+    $('#nudgeLater').addEventListener('click', () => { hideNudge(); toast('Good stopping point.'); });
+    document.addEventListener('click', (e) => {
+      const st = e.target.closest('[data-steps]');
+      if (st) {
+        const id = st.dataset.steps;
+        state.expanded = state.expanded.includes(id) ? state.expanded.filter((x) => x !== id) : state.expanded.concat(id).slice(-50);
+        store.set('expanded', state.expanded); render();
+      }
+      if (e.target.closest('[data-done-more]')) { state.doneOpen = !state.doneOpen; renderDone(data()); }
     });
 
     $('#quickAdd').addEventListener('submit', quickAdd);
