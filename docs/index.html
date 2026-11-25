@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=8">
+  <link rel="stylesheet" href="styles.css?v=9">
 </head>
 <body>
   <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
@@ -50,7 +50,7 @@
     <section class="view" id="view-today">
       <article class="hero card" id="upNext"></article>
 
-      <section class="panel" style="--tint:#7b6cff" aria-labelledby="hNext">
+      <section class="panel p-next" aria-labelledby="hNext">
         <header class="panel-head">
           <span class="panel-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 3 5 13.5h6L10 21l8-10.5h-6L13 3Z"/></svg></span>
           <h2 id="hNext">Do this next</h2>
@@ -58,7 +58,7 @@
         <div class="next-step" id="nextStep"></div>
       </section>
 
-      <section class="panel" style="--tint:#ff7a59" aria-labelledby="hFocus">
+      <section class="panel p-focus" aria-labelledby="hFocus">
         <header class="panel-head">
           <span class="panel-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg></span>
           <h2 id="hFocus">Focus</h2>
@@ -67,7 +67,7 @@
         <ul class="task-list" id="focusList"></ul>
       </section>
 
-      <section class="panel" style="--tint:#2f8fff" aria-labelledby="hBreak">
+      <section class="panel p-break" aria-labelledby="hBreak">
         <header class="panel-head">
           <span class="panel-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/></svg></span>
           <h2 id="hBreak">Break it down</h2>
@@ -82,7 +82,7 @@
         </div>
       </section>
 
-      <section class="panel" style="--tint:#1fa37a" aria-labelledby="doneTitle">
+      <section class="panel p-done" aria-labelledby="doneTitle">
         <header class="panel-head">
           <span class="panel-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
           <h2 id="doneTitle">Done today</h2>
@@ -205,12 +205,12 @@
         <button type="button" class="ghost-btn" id="sDisconnect">Use sample data</button>
         <button type="submit" class="primary-btn">Save &amp; connect</button>
       </div>
-      <p class="fine">Tempo talks only to your own Google Apps Script. Your web app URL and app key stay on this device. <span class="ver">Version 8</span></p>
+      <p class="fine">Tempo talks only to your own Google Apps Script. Your web app URL and app key stay on this device. <span class="ver">Version 9</span></p>
     </form>
   </section>
 
   <div class="toast" id="toast" role="status" hidden></div>
 
-  <script src="app.js?v=8"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>
