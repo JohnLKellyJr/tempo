@@ -352,3 +352,7 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .panel .task.sub { background: var(--surface); }
 .panel .breaker-form { background: var(--surface-solid); }
 .panel .empty-note { padding: 10px 4px; }
+.panel.p-overdue { --tint: #e5484d; --tint-bg: rgba(229, 72, 77, .07); --tint-line: rgba(229, 72, 77, .42); --tint-soft: rgba(229, 72, 77, .16); }
+.panel.p-anytime { --tint: #8a85a0; --tint-bg: rgba(138, 133, 160, .06); --tint-line: rgba(138, 133, 160, .38); --tint-soft: rgba(138, 133, 160, .16); }
+.panel-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--tint); box-shadow: 0 0 0 4px var(--tint-soft); margin: 0 4px; }
+#taskGroups .panel:first-child { margin-top: 14px; }
