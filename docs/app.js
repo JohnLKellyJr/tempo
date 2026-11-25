@@ -19,6 +19,9 @@
     data: store.get('snapshot', null),      // { events, todos, now }
     history: store.get('history', []),      // [{ role, text }]
     view: store.get('view', 'today'),
+    expanded: store.get('expanded', []),   // task ids whose steps are unfolded
+    pinned: null,                          // step picked from the momentum nudge
+    doneOpen: false,
     editing: null
   };
 
@@ -68,9 +71,15 @@
         ev('s8', 'Dinner with family', 4, '18:30', '20:30', 'Personal', '#a78bfa')
       ],
       todos: [
+        { id: 'w1', title: 'Email TA about lab partner', due: k(-1), priority: 'normal', done: true, minutes: 5, parent: '', notes: '', completed: k(-1) + 'T15:10' },
+        { id: 'w2', title: 'Print the reading', due: k(-1), priority: 'normal', done: true, minutes: 5, parent: '', notes: '', completed: k(-1) + 'T18:40' },
+        { id: 'w3', title: 'Laundry', due: '', priority: 'low', done: true, minutes: 20, parent: '', notes: '', completed: k(-2) + 'T20:00' },
+        { id: 'w4', title: 'Submit stats homework', due: k(-3), priority: 'high', done: true, minutes: 45, parent: '', notes: '', completed: k(-3) + 'T21:15' },
         { id: 'a1', title: 'Finish lab report draft', due: k(0), priority: 'high', done: false, minutes: 90, parent: '', notes: '' },
-        { id: 'a2', title: 'Outline intro + methods', due: k(0), priority: 'normal', done: true, minutes: 30, parent: 'a1', notes: '' },
-        { id: 'a3', title: 'Make the two graphs', due: k(0), priority: 'normal', done: false, minutes: 40, parent: 'a1', notes: '' },
+        { id: 'a2', title: 'Outline intro + methods', due: k(0), priority: 'normal', done: true, minutes: 30, parent: 'a1', notes: '', completed: k(0) + 'T08:50' },
+        { id: 'a3', title: 'Open the data sheet and pick the two columns', due: k(0), priority: 'normal', done: false, minutes: 5, parent: 'a1', notes: '' },
+        { id: 'a8', title: 'Make the two graphs', due: k(0), priority: 'normal', done: false, minutes: 20, parent: 'a1', notes: '' },
+        { id: 'a9', title: 'Write the results paragraph', due: k(0), priority: 'normal', done: false, minutes: 15, parent: 'a1', notes: '' },
         { id: 'a4', title: 'Email Prof. Lee about extension', due: k(-1), priority: 'normal', done: false, minutes: 10, parent: '', notes: '' },
         { id: 'a5', title: 'Review chapters 7–9 for Bio', due: k(2), priority: 'high', done: false, minutes: 120, parent: '', notes: '' },
         { id: 'a6', title: 'Pay phone bill', due: k(5), priority: 'low', done: false, minutes: null, parent: '', notes: '', remind: k(5) + 'T09:00' },
@@ -147,7 +156,6 @@
   function renderToday() {
     const d = data();
     const now = new Date();
-    const today = dayKey(now);
 
     // Up next
     const upcomingTimed = d.events.filter((e) => !e.all_day && parse(e.end) > now).sort((a, b) => a.start.localeCompare(b.start));
@@ -173,38 +181,118 @@
     const focus = open.sort(taskOrder).slice(0, 3);
     $('#focusList').innerHTML = focus.length ? focus.map((t) => taskHTML(t, d.todos)).join('') : `<li class="empty-note">All clear. Nothing urgent.</li>`;
 
-    // Today timeline
-    const todays = d.events.filter((e) => e.start.slice(0, 10) === today).sort((a, b) => a.start.localeCompare(b.start));
-    $('#scheduleTitle').textContent = 'Today';
-    let html = '', nowPlaced = false;
-    todays.forEach((e) => {
-      const s = parse(e.start), en = parse(e.end);
-      if (!nowPlaced && s > now) { html += nowLine(now); nowPlaced = true; }
-      const cls = en <= now ? 'past' : s <= now ? 'now' : '';
-      html += `<li class="ev ${cls}">
-        <div class="ev-time">${e.all_day ? 'All day' : `${timeFmt(s)}<small>${ampm(s)}</small>`}</div>
-        <div class="ev-card" style="--ev-color:${esc(e.color || '')}">
-          <div class="ev-title">${esc(e.title)}</div>
-          <div class="ev-sub">${e.all_day ? '' : `${timeFull(s)} – ${timeFull(en)}`}${e.location ? ' · ' + esc(e.location) : ''}${e.calendar ? ' · ' + esc(e.calendar) : ''}</div>
-        </div></li>`;
-    });
-    if (todays.length && !nowPlaced) html += nowLine(now);
-    $('#timeline').innerHTML = html || `<li class="empty-note">No events today.</li>`;
-
-    // Coming up (next 6 days)
-    const later = d.events.filter((e) => e.start.slice(0, 10) > today).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 6);
-    $('#upcoming').innerHTML = later.length ? later.map((e) => {
-      const s = parse(e.start), en = parse(e.end);
-      return `<li>
-        <div class="day-badge"><span>${WD[s.getDay()]}</span><b>${s.getDate()}</b></div>
-        <div class="up-body"><div class="ev-title">${esc(e.title)}</div>
-          <div class="ev-sub">${e.all_day ? 'All day' : `${timeFull(s)} – ${timeFull(en)}`}${e.location ? ' · ' + esc(e.location) : ''}</div></div>
-        <span class="cal-dot" style="background:${esc(e.color || 'var(--accent)')}"></span>
-      </li>`;
-    }).join('') : `<li class="empty-note">Nothing else this week.</li>`;
+    renderNextStep(d);
+    renderBreaker(d);
+    renderDone(d);
   }
 
-  const nowLine = (now) => `<li class="now-line" aria-label="Now"><span>${timeFull(now).toUpperCase()}</span><span></span></li>`;
+  // ───────────── Do this next: one small step, nothing else ─────────────
+  // Walk the tasks in focus order. A task with steps offers its first
+  // unfinished step; a task without steps offers itself. A step picked from
+  // the momentum nudge ("Let's go") goes to the front.
+  const skipped = new Set();
+  const stepsOf = (d, id) => d.todos.filter((s) => s.parent === id);
+  function candidateFor(d, t) {
+    if (t.parent) {
+      const parent = d.todos.find((p) => p.id === t.parent);
+      const subs = stepsOf(d, t.parent);
+      return { todo: t, parent, n: subs.indexOf(t) + 1, of: subs.length, doneCount: subs.filter((x) => x.done).length };
+    }
+    const subs = stepsOf(d, t.id);
+    const openSub = subs.find((x) => !x.done);
+    if (openSub) return candidateFor(d, openSub);
+    return { todo: t, parent: null, allSteps: subs.length };
+  }
+  function nextCandidates(d) {
+    const out = topLevel(d.todos.filter((t) => !t.done)).sort(taskOrder).map((t) => candidateFor(d, t));
+    const pin = state.pinned && d.todos.find((t) => t.id === state.pinned && !t.done);
+    if (pin) {
+      const c = candidateFor(d, pin);
+      return [c].concat(out.filter((o) => o.todo.id !== c.todo.id));
+    }
+    return out;
+  }
+  function renderNextStep(d) {
+    const box = $('#nextStep');
+    const all = nextCandidates(d);
+    let list = all.filter((c) => !skipped.has(c.todo.id));
+    if (!list.length && all.length) { skipped.clear(); list = all; }
+    const c = list[0];
+    if (!c) {
+      box.className = 'card next-step empty';
+      box.innerHTML = `<h3>Nothing waiting on you.</h3><p class="ns-sub">Enjoy it, or tell Tempo what’s next.</p>`;
+      return;
+    }
+    const t = c.todo;
+    const sub = c.parent
+      ? `Step ${c.n} of ${c.of} · ${esc(c.parent.title)}`
+      : c.allSteps ? 'All the steps are done. Finish it off.' : t.minutes ? `About ${minText(t.minutes)}` : '';
+    const big = !c.parent && !c.allSteps && (t.minutes ? t.minutes >= 30 : t.priority === 'high');
+    box.className = 'card next-step' + (state.pinned === t.id ? ' started' : '');
+    box.dataset.id = t.id;
+    box.innerHTML = `
+      ${state.pinned === t.id ? '<p class="ns-kicker">You’re on it</p>' : ''}
+      <h3>${esc(t.title)}</h3>
+      ${sub ? `<p class="ns-sub">${sub}</p>` : ''}
+      ${c.parent ? progressHTML(c.doneCount, c.of) : ''}
+      ${big ? '<p class="ns-hint">Feels like a lot? Break it into tiny steps first.</p>' : ''}
+      <div class="ns-btns">
+        <button class="ns-done" data-ns="done">${CHECK_SVG}<span>Done</span></button>
+        ${big ? '<button class="ns-alt" data-ns="break"><span class="spark" aria-hidden="true"></span>Break it down</button>' : ''}
+        ${list.length > 1 ? '<button class="ns-skip" data-ns="skip">Not now</button>' : ''}
+      </div>`;
+  }
+  function progressHTML(done, of) {
+    const pct = of ? Math.round((done / of) * 100) : 0;
+    return `<div class="progress${done === of ? ' full' : ''}" role="progressbar" aria-valuemin="0" aria-valuemax="${of}" aria-valuenow="${done}" aria-label="${done} of ${of} steps done">
+      <div class="bar"><i style="width:${pct}%"></i></div><span>${done} of ${of} steps</span></div>`;
+  }
+  const minText = (m) => (m < 60 ? `${m} min` : `${(m / 60).toFixed(m % 60 ? 1 : 0)} hr`);
+
+  // ───────────── Break it down ─────────────
+  function renderBreaker(d) {
+    // Suggest big open tasks that don't have steps yet.
+    const picks = topLevel(d.todos.filter((t) => !t.done))
+      .filter((t) => !d.todos.some((s) => s.parent === t.id) && (t.minutes ? t.minutes >= 45 : t.priority === 'high'))
+      .sort(taskOrder).slice(0, 3);
+    $('#breakPicks').innerHTML = picks.length
+      ? `<p class="picks-label">Or pick one of these</p>` + picks.map((t) =>
+        `<button class="pick" data-break="${esc(t.id)}"><span class="spark" aria-hidden="true"></span><span class="pick-title">${esc(t.title)}</span>${t.minutes ? `<span class="pick-meta">${minText(t.minutes)}</span>` : ''}</button>`).join('')
+      : '';
+  }
+  function breakDown(t) {
+    if (!t) return;
+    ask(`Break "${t.title}" into small steps and add them as sub-tasks.`);
+  }
+  function breakNew(title) {
+    ask(`I need to: ${title}. Add it as a task and break it into small steps as sub-tasks.`);
+  }
+
+  // ───────────── Done today: proof of what actually got finished ─────────────
+  const DONE_PREVIEW = 5;
+  function doneOn(d, day) {
+    return d.todos.filter((t) => t.done && t.completed && t.completed.slice(0, 10) === day)
+      .sort((a, b) => b.completed.localeCompare(a.completed));
+  }
+  function renderDone(d) {
+    const today = dayKey(new Date());
+    const list = doneOn(d, today);
+    $('#doneTitle').innerHTML = `Done today${list.length ? ` <span class="count">${list.length}</span>` : ''}`;
+    const box = $('#doneList');
+    if (!list.length) {
+      const y = doneOn(d, dayKey(addDays(new Date(), -1))).length;
+      box.innerHTML = `<p class="done-empty">${y ? `Nothing yet today. Yesterday you finished ${y} ${y === 1 ? 'thing' : 'things'}, so you know you can.` : 'What you finish today lands here.'}</p>`;
+      return;
+    }
+    const open = !!state.doneOpen;
+    const shown = open ? list : list.slice(0, DONE_PREVIEW);
+    box.innerHTML = `<ul>${shown.map((t) => {
+      const parent = t.parent && d.todos.find((p) => p.id === t.parent);
+      return `<li>${CHECK_SVG}<div><span class="dl-title">${esc(t.title)}</span>${parent ? `<span class="dl-sub">Step of ${esc(parent.title)}</span>` : ''}</div><time>${esc(timeFull(parse(t.completed)))}</time></li>`;
+    }).join('')}</ul>
+      ${list.length > DONE_PREVIEW ? `<button class="more-btn" data-done-more>${open ? 'Show less' : `Show ${list.length - DONE_PREVIEW} more`}</button>` : ''}`;
+  }
+
   const topLevel = (list) => list.filter((t) => !t.parent);
   const priRank = { high: 0, normal: 1, low: 2 };
   function taskOrder(a, b) {
@@ -228,13 +316,25 @@
     }
     if (t.priority === 'high' && !t.done) tags.push('<span class="tag high">Priority</span>');
     if (t.minutes) tags.push(`<span class="tag">${t.minutes < 60 ? t.minutes + ' min' : (t.minutes / 60).toFixed(t.minutes % 60 ? 1 : 0) + ' hr'}</span>`);
-    const subs = all.filter((s) => s.parent === t.id);
-    if (subs.length) tags.push(`<span class="tag">${subs.filter((s) => s.done).length}/${subs.length} steps</span>`);
+    const subs = isSub ? [] : all.filter((s) => s.parent === t.id);
+    const doneSubs = subs.filter((s) => s.done).length;
     let html = `<li class="task ${t.done ? 'done' : ''} ${isSub ? 'sub' : ''}" data-id="${esc(t.id)}">
       <button class="check ${t.done ? 'on' : ''} ${t.priority === 'high' ? 'pri-high' : ''}" data-act="toggle" aria-label="${t.done ? 'Mark not done' : 'Mark done'}">${CHECK_SVG}</button>
-      <button class="t-body" data-act="edit"><div class="t-title">${esc(t.title)}</div>${tags.length ? `<div class="t-meta">${tags.join('')}</div>` : ''}</button>
+      <button class="t-body" data-act="edit"><div class="t-title">${esc(t.title)}</div>${tags.length ? `<div class="t-meta">${tags.join('')}</div>` : ''}${subs.length ? progressHTML(doneSubs, subs.length) : ''}</button>
     </li>`;
-    if (!isSub) subs.sort((a, b) => Number(a.done) - Number(b.done)).forEach((s) => { html += taskHTML(s, all, true); });
+    if (!subs.length) return html;
+    // Steps stay in the order Tempo made them. Folded, only the next
+    // unfinished step shows; "Show all" opens the rest.
+    const expanded = state.expanded.includes(t.id);
+    const nextOpen = subs.find((s) => !s.done);
+    const visible = expanded ? subs : (t.done || !nextOpen ? [] : [nextOpen]);
+    visible.forEach((s) => { html += taskHTML(s, all, true); });
+    const hidden = subs.length - visible.length;
+    if (expanded || hidden) {
+      html += `<li class="steps-toggle"><button data-steps="${esc(t.id)}" aria-expanded="${expanded}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${expanded ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6'}"/></svg>
+        ${expanded ? 'Show less' : visible.length ? `Show all ${subs.length} steps` : `Show ${subs.length} steps`}</button></li>`;
+    }
     return html;
   }
 
@@ -271,15 +371,69 @@
   async function toggleTodo(id, li) {
     const t = findTodo(id); if (!t) return;
     const done = !t.done;
+    const prevCompleted = t.completed;
     t.done = done; // optimistic
-    if (navigator.vibrate) navigator.vibrate(8);
-    li.querySelector('.check').classList.toggle('on', done);
-    li.classList.toggle('done', done);
+    t.completed = done ? localISO(new Date()) : '';
+    if (navigator.vibrate) navigator.vibrate(done ? [8, 40, 12] : 8);
+    const check = li && li.querySelector('.check');
+    if (check) check.classList.toggle('on', done);
+    if (li) li.classList.toggle('done', done);
+    if (done) nudge(t);
     setTimeout(render, 380);
     if (isConnected()) {
       try { await api('updateTodo', { todo: { id, done } }); render(); }
-      catch (e) { t.done = !done; render(); toast(e.message); }
+      catch (e) { t.done = !done; t.completed = prevCompleted; render(); toast(e.message); }
     }
+  }
+
+  // ───────────── Momentum nudge ─────────────
+  // Right after a check-off, while it feels good, offer the next tiny step.
+  const CHEERS = ['Nice!', 'Done!', 'Look at you.', 'One less thing.', 'That counts.', 'Yes!'];
+  let nudgeNext = null;
+  function nudge(t) {
+    const d = data();
+    if (state.pinned === t.id) state.pinned = null;
+    const cheer = CHEERS[Math.floor(Math.random() * CHEERS.length)];
+    let next = null, kicker, title;
+    if (t.parent) {
+      const sibs = stepsOf(d, t.parent);
+      const parent = d.todos.find((p) => p.id === t.parent);
+      next = sibs.find((s) => !s.done);
+      if (!next && parent && !parent.done) {
+        next = parent;
+        kicker = `${cheer} Every step is done.`;
+        title = `Check off “${parent.title}” too?`;
+      } else if (next) {
+        kicker = `${cheer} ${sibs.filter((s) => s.done).length} of ${sibs.length} done. While you’re rolling:`;
+      }
+    }
+    if (!next) {
+      const c = nextCandidates(d).find((x) => x.todo.id !== t.id);
+      if (c) { next = c.todo; kicker = `${cheer} Keep the momentum? Next up:`; }
+    }
+    if (!next) { toast(`${cheer} That’s everything on your list.`); return; }
+    nudgeNext = next;
+    $('#nudgeKicker').textContent = kicker;
+    $('#nudgeTitle').textContent = title || (next.title + (next.minutes ? ` · ${minText(next.minutes)}` : ''));
+    $('#nudgeGo').textContent = next === d.todos.find((p) => p.id === t.parent) ? 'Check it off' : 'Let’s go';
+    $('#reply').hidden = true;
+    const box = $('#nudge');
+    box.hidden = false;
+    box.style.animation = 'none'; void box.offsetWidth; box.style.animation = '';
+    clearTimeout(nudge._t);
+    nudge._t = setTimeout(hideNudge, 15000);
+  }
+  function hideNudge() { $('#nudge').hidden = true; clearTimeout(nudge._t); }
+  function nudgeGo() {
+    const n = nudgeNext; hideNudge(); if (!n) return;
+    const d = data();
+    const isParentFinish = !n.parent && stepsOf(d, n.id).length && stepsOf(d, n.id).every((s) => s.done);
+    if (isParentFinish) { toggleTodo(n.id, null); return; }
+    state.pinned = n.id; skipped.delete(n.id);
+    setView('today'); render();
+    const card = $('#nextStep');
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.remove('flash'); void card.offsetWidth; card.classList.add('flash');
   }
 
   function openTask(id) {
@@ -607,13 +761,44 @@
     $('#openChat').addEventListener('click', () => { renderChat(); openSheet('chat'); });
     $('#clearChat').addEventListener('click', () => { state.history = []; store.set('history', []); renderChat(); });
 
+    $('#nextStep').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-ns]'); if (!b) return;
+      const id = $('#nextStep').dataset.id;
+      if (b.dataset.ns === 'done') {
+        const box = $('#nextStep'); box.classList.add('leaving');
+        toggleTodo(id, null);
+      }
+      if (b.dataset.ns === 'skip') { skipped.add(id); renderNextStep(data()); }
+      if (b.dataset.ns === 'break') breakDown(findTodo(id));
+    });
+    $('#breakPicks').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-break]'); if (b) breakDown(findTodo(b.dataset.break));
+    });
+    $('#breakForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const input = $('#breakInput'); const v = input.value.trim(); if (!v) return;
+      input.value = ''; input.blur(); breakNew(v);
+    });
+
+    $('#nudgeGo').addEventListener('click', nudgeGo);
+    $('#nudgeLater').addEventListener('click', () => { hideNudge(); toast('Good stopping point.'); });
+    document.addEventListener('click', (e) => {
+      const st = e.target.closest('[data-steps]');
+      if (st) {
+        const id = st.dataset.steps;
+        state.expanded = state.expanded.includes(id) ? state.expanded.filter((x) => x !== id) : state.expanded.concat(id).slice(-50);
+        store.set('expanded', state.expanded); render();
+      }
+      if (e.target.closest('[data-done-more]')) { state.doneOpen = !state.doneOpen; renderDone(data()); }
+    });
+
     $('#quickAdd').addEventListener('submit', quickAdd);
     $('#taskForm').addEventListener('submit', saveTask);
     $('#tDelete').addEventListener('click', deleteTask);
     $$('#tPriority button').forEach((b) => b.addEventListener('click', () => { $$('#tPriority button').forEach((x) => x.classList.toggle('on', x === b)); }));
     $('#tBreak').addEventListener('click', () => {
       const t = findTodo(state.editing); closeSheets();
-      if (t) ask(`Break "${t.title}" into small steps and add them as sub-tasks.`);
+      breakDown(t);
     });
 
     $('#openSettings').addEventListener('click', openSettings);
