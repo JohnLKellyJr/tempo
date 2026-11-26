@@ -486,3 +486,9 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .seg.active { color: var(--accent); }
 /* Bigger greeting. */
 .greeting { font-size: clamp(44px, 13vw, 60px); line-height: .98; }
+
+/* "Do this next" gets a thin border in the week's gradient. */
+.panel.p-next { border: 2px solid transparent;
+  background: linear-gradient(var(--surface-solid), var(--surface-solid)) padding-box, var(--grad) border-box;
+  box-shadow: inset 0 1px 0 var(--edge), 0 14px 34px -18px rgba(var(--glow), .55), var(--shadow); }
+.panel.p-next::before { display: none; }
