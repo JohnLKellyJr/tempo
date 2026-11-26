@@ -81,14 +81,13 @@ body {
   font-size: 16px;
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
-  overflow: hidden;
-  overscroll-behavior: none;
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
 }
-html, body { height: 100%; }
-/* The page scrolls inside .scroller so the side scroll bar can be hidden
-   everywhere, including the iPhone home-screen app. */
-.scroller { position: fixed; inset: 0; z-index: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; }
-* { scrollbar-width: none; }
+/* The page itself scrolls (a fixed-height page makes iPhone home-screen apps
+   lift the bottom bar off the bottom), with the side scroll bar hidden. */
+.scroller { position: relative; z-index: 1; }
+html, * { scrollbar-width: none; }
 *::-webkit-scrollbar { display: none; width: 0; height: 0; background: transparent; }
 button, input, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; border: 0; background: none; padding: 0; }

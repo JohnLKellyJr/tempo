@@ -993,13 +993,13 @@
       setTimeout(() => { app.classList.remove('settle'); ptr.classList.remove('anim'); }, 320);
     };
     sc.addEventListener('touchstart', (e) => {
-      if (syncing || sc.scrollTop > 0 || sheetOpen() || e.touches.length > 1) { y0 = null; return; }
+      if (syncing || window.scrollY > 0 || sheetOpen() || e.touches.length > 1) { y0 = null; return; }
       y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; pull = 0;
     }, { passive: true });
     sc.addEventListener('touchmove', (e) => {
       if (y0 == null) return;
       const dy = e.touches[0].clientY - y0, dx = Math.abs(e.touches[0].clientX - x0);
-      if (dy <= 0 || sc.scrollTop > 0) { if (pull) { pull = 0; show(0); } if (dy < 0) y0 = null; return; }
+      if (dy <= 0 || window.scrollY > 0) { if (pull) { pull = 0; show(0); } if (dy < 0) y0 = null; return; }
       if (!pull && dx > dy) { y0 = null; return; }
       e.preventDefault();
       pull = Math.min(130, dy * 0.5);
