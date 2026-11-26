@@ -67,6 +67,10 @@
     { name: 'Rose', light: '#c2306a', dark: '#ff7fae', a2: '#8b5cf6', g: ['#e8487f', '#f06fa8', '#ffab76'], t: ['#e8487f', '#f58246', '#8b5cf6', '#1fa37a'] },
     { name: 'Dusk', light: '#4f46e5', dark: '#a5a1ff', a2: '#f59e0b', g: ['#4f46e5', '#9b51e0', '#f5a00b'], t: ['#5b52f0', '#f59e0b', '#06b6d4', '#1fa37a'] }
   ];
+  // Blend two #rrggbb colors: mix(a, b, .2) is 80% a and 20% b.
+  const mix = (a, b, w) => { const x = parseInt(a.slice(1), 16), y = parseInt(b.slice(1), 16);
+    const c = (sh) => Math.round(((x >> sh) & 255) * (1 - w) + ((y >> sh) & 255) * w);
+    return '#' + ((1 << 24) + (c(16) << 16) + (c(8) << 8) + c(0)).toString(16).slice(1); };
   const rgb = (hex) => { const n = parseInt(hex.slice(1), 16); return `${n >> 16}, ${(n >> 8) & 255}, ${n & 255}`; };
   function weekIndex(d) {
     const days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(2024, 0, 1)) / 86400000);
@@ -79,17 +83,34 @@
     if (paletteShown === p.name) return;
     paletteShown = p.name;
     const [g1, g2, g3] = p.g;
-    const common = `--accent-2:${p.a2};--a2:${rgb(p.a2)};--glow:${rgb(g2)};` +
+    // Each theme tints the whole app, not just the accents: the page, the
+    // cards, the lines and the bottom bar all lean toward the week's colors.
+    const common = `--accent-2:${p.a2};--a2:${rgb(p.a2)};--glow:${rgb(g2)};--g1:${rgb(g1)};--g2:${rgb(g2)};--g3:${rgb(g3)};` +
       `--grad:linear-gradient(135deg, ${g1} 0%, ${g2} 48%, ${g3} 100%);` +
       `--t-next:${rgb(p.t[0])};--t-focus:${rgb(p.t[1])};--t-break:${rgb(p.t[2])};--t-done:${rgb(p.t[3])};`;
-    const light = `--accent:${p.light};--accent-soft:rgba(${rgb(p.light)}, .12);--aurora-a:rgba(${rgb(g1)}, .32);--aurora-b:rgba(${rgb(g3)}, .28);--aurora-c:rgba(${rgb(g2)}, .2);`;
-    const dark = `--accent:${p.dark};--accent-soft:rgba(${rgb(p.dark)}, .16);--aurora-a:rgba(${rgb(g1)}, .28);--aurora-b:rgba(${rgb(g3)}, .15);--aurora-c:rgba(${rgb(g2)}, .14);`;
+    const light = `--accent:${p.light};--accent-soft:rgba(${rgb(p.light)}, .13);` +
+      `--bg:${mix('#fbf9f6', g1, .09)};--bg-2:${mix('#f6f3ee', g2, .12)};` +
+      `--surface:rgba(${rgb(mix('#ffffff', g2, .04))}, .7);--surface-solid:${mix('#ffffff', g2, .025)};` +
+      `--surface-2:rgba(${rgb(g1)}, .07);--line:rgba(${rgb(g1)}, .14);` +
+      `--text-2:${mix('#5d5868', p.light, .18)};--dock:rgba(${rgb(mix('#ffffff', g2, .04))}, .92);` +
+      `--aurora-a:rgba(${rgb(g1)}, .42);--aurora-b:rgba(${rgb(g3)}, .36);--aurora-c:rgba(${rgb(g2)}, .3);`;
+    const dark = `--accent:${p.dark};--accent-soft:rgba(${rgb(p.dark)}, .18);` +
+      `--bg:${mix('#08080d', g1, .13)};--bg-2:${mix('#0d0d15', g2, .16)};` +
+      `--surface:rgba(${rgb(mix('#14131d', g1, .2))}, .62);--surface-solid:${mix('#15141e', g1, .16)};` +
+      `--surface-2:rgba(${rgb(p.dark)}, .08);--line:rgba(${rgb(p.dark)}, .15);` +
+      `--text-2:${mix('#b4afc4', p.dark, .22)};--text-3:${mix('#7d788f', p.dark, .2)};` +
+      `--dock:rgba(${rgb(mix('#17161f', g1, .2))}, .92);--thumb:rgba(${rgb(p.dark)}, .2);` +
+      `--aurora-a:rgba(${rgb(g1)}, .5);--aurora-b:rgba(${rgb(g3)}, .3);--aurora-c:rgba(${rgb(g2)}, .34);`;
     let el = document.getElementById('paletteStyle');
     if (!el) { el = document.createElement('style'); el.id = 'paletteStyle'; document.head.appendChild(el); }
     el.textContent = `:root{${common}${light}}` +
       `@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){${dark}}}` +
       `:root[data-theme="dark"]{${dark}}`;
     document.documentElement.dataset.palette = p.name.toLowerCase();
+    // Match the phone's status bar to the tinted page.
+    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => {
+      m.content = (m.media || '').includes('dark') ? mix('#08080d', g1, .13) : mix('#fbf9f6', g1, .09);
+    });
   }
 
   // ───────────── Sample data (preview before connecting) ─────────────
