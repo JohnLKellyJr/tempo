@@ -7,6 +7,7 @@
   <meta name="description" content="Your calendar and to-do assistant.">
   <meta name="theme-color" content="#0b0b12" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#f6f3ee" media="(prefers-color-scheme: light)">
+  <script>/* Start in the last light/dark look so the app doesn't flash. */try{var l=JSON.parse(localStorage.getItem('tempo.lookNow')||'""');if(l)document.documentElement.dataset.theme=l;}catch(e){}</script>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -17,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=13">
+  <link rel="stylesheet" href="styles.css?v=19">
 </head>
 <body>
   <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
@@ -219,6 +220,12 @@
         <input id="sKey" placeholder="From Apps Script → showAppKey" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off">
       </label>
       <p class="status" id="sStatus"></p>
+      <div class="field stack look-field"><span>Light &amp; dark</span>
+        <div class="choice" id="sLook">
+          <button type="button" data-v="sun">Sun</button><button type="button" data-v="light">Light</button><button type="button" data-v="dark">Dark</button><button type="button" data-v="system">Phone</button>
+        </div>
+        <p class="rem-text" id="sLookText"></p>
+      </div>
       <div class="field palette-field"><span>Colors · new every Monday</span><span class="palette-name" id="sPalette"></span></div>
       <div class="field stack reminders" id="sReminders" hidden>
         <span>Reminders</span>
@@ -230,12 +237,12 @@
         <button type="button" class="ghost-btn" id="sDisconnect">Use sample data</button>
         <button type="submit" class="primary-btn">Save &amp; connect</button>
       </div>
-      <p class="fine">Tempo talks only to your own Google Apps Script. Your web app URL and app key stay on this device. <span class="ver">Version 18</span></p>
+      <p class="fine">Tempo talks only to your own Google Apps Script. Your web app URL and app key stay on this device. <span class="ver">Version 19</span></p>
     </form>
   </section>
 
   <div class="toast" id="toast" role="status" hidden></div>
 
-  <script src="app.js?v=13"></script>
+  <script src="app.js?v=19"></script>
 </body>
 </html>
