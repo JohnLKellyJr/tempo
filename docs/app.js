@@ -614,10 +614,16 @@
 
   const topLevel = (list) => list.filter((t) => !t.parent);
   const priRank = { high: 0, normal: 1, low: 2 };
+  // Soonest due date first (overdue on top, no date last), then High,
+  // Medium, Low within the same day. Ties go to the earlier reminder
+  // time, then the task that was added first.
   function taskOrder(a, b) {
     const ad = a.due || '9999', bd = b.due || '9999';
     if (ad !== bd) return ad.localeCompare(bd);
-    return (priRank[a.priority] ?? 1) - (priRank[b.priority] ?? 1);
+    const pr = (priRank[a.priority] ?? 1) - (priRank[b.priority] ?? 1);
+    if (pr) return pr;
+    const ar = (!a.reminded && a.remind) || '9999', br = (!b.reminded && b.remind) || '9999';
+    return ar.localeCompare(br); // equal: sort is stable, so the order they were added stays
   }
 
   const CHECK_SVG = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
@@ -633,7 +639,8 @@
       const r = parse(t.remind);
       tags.push(`<span class="tag remind">${BELL_SVG}${t.remind.slice(0, 10) === t.due ? '' : esc(relDay(t.remind.slice(0, 10))) + ' '}${esc(timeFull(r))}</span>`);
     }
-    if (t.priority === 'high' && !t.done) tags.push('<span class="tag high">Priority</span>');
+    if (t.priority === 'high' && !t.done) tags.push('<span class="tag high">High</span>');
+    if (t.priority === 'low' && !t.done) tags.push('<span class="tag low">Low</span>');
     if (t.minutes) tags.push(`<span class="tag">${t.minutes < 60 ? t.minutes + ' min' : (t.minutes / 60).toFixed(t.minutes % 60 ? 1 : 0) + ' hr'}</span>`);
     const subs = isSub ? [] : all.filter((s) => s.parent === t.id);
     const doneSubs = subs.filter((s) => s.done).length;
@@ -669,7 +676,7 @@
       ['This week', 'p-break', open.filter((t) => t.due > today && t.due <= weekEnd)],
       ['Later', 'p-focus', open.filter((t) => t.due > weekEnd)],
       ['Anytime', 'p-anytime', open.filter((t) => !t.due)],
-      ['Done', 'p-done', topLevel(d.todos.filter((t) => t.done))]
+      ['Done', 'p-done', topLevel(d.todos.filter((t) => t.done)).sort((a, b) => String(b.completed || '').localeCompare(String(a.completed || '')))]
     ];
     const html = groups.filter(([, , l]) => l.length).map(([name, cls, l]) =>
       `<section class="panel ${cls}"><header class="panel-head"><span class="panel-dot" aria-hidden="true"></span><h2>${name} <span class="count">${l.length}</span></h2></header><ul class="task-list">${l.map((t) => taskHTML(t, d.todos)).join('')}</ul></section>`).join('');
