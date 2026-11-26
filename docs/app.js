@@ -105,10 +105,67 @@
       `@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){${dark}}}` +
       `:root[data-theme="dark"]{${dark}}`;
     document.documentElement.dataset.palette = p.name.toLowerCase();
-    // Match the phone's status bar to the tinted page.
+  }
+
+  // ───────────── Light by day, dark by night ─────────────
+  // "sun" (the default) switches to light a little after sunrise and to dark
+  // around dusk. "system" follows the phone; "light"/"dark" pin one look.
+  const LIGHT_AFTER_SUNRISE = 30, DARK_AFTER_SUNSET = 20; // minutes
+  const DEFAULT_GEO = { lat: 39.74, lon: -104.99 }; // Denver, until the phone shares a location
+  // Sunrise and sunset for a date and place (NOAA's simplified formula), as Dates.
+  function sunTimes(date, lat, lon) {
+    const rad = Math.PI / 180;
+    const midnightUtc = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+    const doy = Math.round((midnightUtc - Date.UTC(date.getFullYear(), 0, 0)) / 86400000);
+    const g = 2 * Math.PI / 365 * (doy - 1);
+    const eqt = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g) - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g));
+    const decl = 0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g) - 0.006758 * Math.cos(2 * g) + 0.000907 * Math.sin(2 * g) - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g);
+    const cosH = (Math.cos(90.833 * rad) - Math.sin(lat * rad) * Math.sin(decl)) / (Math.cos(lat * rad) * Math.cos(decl));
+    const h = Math.acos(Math.max(-1, Math.min(1, cosH))) / rad;
+    const at = (min) => new Date(midnightUtc + min * 60000);
+    return { rise: at(720 - 4 * (lon + h) - eqt), set: at(720 - 4 * (lon - h) - eqt) };
+  }
+  function themeWindow(now) {
+    const geo = store.get('geo', null) || DEFAULT_GEO;
+    const { rise, set } = sunTimes(now, geo.lat, geo.lon);
+    return { light: new Date(rise.getTime() + LIGHT_AFTER_SUNRISE * 60000), dark: new Date(set.getTime() + DARK_AFTER_SUNSET * 60000) };
+  }
+  // Use the phone's real location for sun times, but only if it's already
+  // allowed, so Tempo never pops up a location prompt on its own.
+  function refreshGeo() {
+    try {
+      if (!navigator.permissions || !navigator.geolocation) return;
+      navigator.permissions.query({ name: 'geolocation' }).then((r) => {
+        if (r.state !== 'granted') return;
+        navigator.geolocation.getCurrentPosition((pos) => {
+          store.set('geo', { lat: +pos.coords.latitude.toFixed(2), lon: +pos.coords.longitude.toFixed(2) });
+          applyAppearance();
+        }, () => {}, { maximumAge: 6 * 3600000, timeout: 10000 });
+      }).catch(() => {});
+    } catch (e) { /* ignore */ }
+  }
+  function applyAppearance() {
+    const mode = store.get('appearance', 'sun');
+    const root = document.documentElement;
+    let look = null;
+    if (mode === 'light' || mode === 'dark') look = mode;
+    else if (mode === 'sun') { const now = new Date(), w = themeWindow(now); look = now >= w.light && now < w.dark ? 'light' : 'dark'; }
+    if (look) root.dataset.theme = look; else delete root.dataset.theme;
+    store.set('lookNow', look || '');
+    // Match the phone's status bar to the page.
+    const g1 = paletteFor(new Date()).g[0];
+    const darkBg = mix('#09090c', g1, .025), lightBg = mix('#f7f6f3', g1, .025);
     document.querySelectorAll('meta[name="theme-color"]').forEach((m) => {
-      m.content = (m.media || '').includes('dark') ? mix('#09090c', g1, .025) : mix('#f7f6f3', g1, .025);
+      m.content = look ? (look === 'dark' ? darkBg : lightBg) : ((m.media || '').includes('dark') ? darkBg : lightBg);
     });
+  }
+  const clockText = (d) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  function renderAppearance() {
+    const mode = store.get('appearance', 'sun');
+    document.querySelectorAll('#sLook button').forEach((b) => b.classList.toggle('on', b.dataset.v === mode));
+    const w = themeWindow(new Date());
+    $('#sLookText').textContent = mode === 'sun' ? `Light from ${clockText(w.light)}, dark from ${clockText(w.dark)} today.`
+      : mode === 'system' ? 'Follows your phone’s light or dark setting.' : `Always ${mode}.`;
   }
 
   // ───────────── Sample data (preview before connecting) ─────────────
@@ -190,6 +247,7 @@
   // ───────────── Rendering ─────────────
   function render() {
     applyPalette();
+    applyAppearance();
     renderHeader();
     renderBrief();
     renderToday();
@@ -891,6 +949,7 @@
     s.textContent = isConnected() ? 'Connected to your Tempo brain.' : 'Not connected. Showing sample data.';
     $('#sDisconnect').hidden = !isConnected();
     $('#sPalette').innerHTML = `<span class="swatch"></span>${esc(paletteFor(new Date()).name)}`;
+    renderAppearance();
     renderReminderStatus();
     openSheet('settings');
   }
@@ -1111,6 +1170,11 @@
     $('#openSettings').addEventListener('click', openSettings);
     $('#demoConnect').addEventListener('click', openSettings);
     $('#settingsForm').addEventListener('submit', saveSettings);
+    $('#sLook').addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-v]'); if (!b) return;
+      store.set('appearance', b.dataset.v); applyAppearance(); renderAppearance();
+    });
+    refreshGeo();
     $('#sRemOn').addEventListener('click', turnOnNotifications);
     $('#sRemTest').addEventListener('click', testReminder);
     $('#sDisconnect').addEventListener('click', () => {

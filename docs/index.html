@@ -7,6 +7,7 @@
   <meta name="description" content="Your calendar and to-do assistant.">
   <meta name="theme-color" content="#0b0b12" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#f6f3ee" media="(prefers-color-scheme: light)">
+  <script>/* Start in the last light/dark look so the app doesn't flash. */try{var l=JSON.parse(localStorage.getItem('tempo.lookNow')||'""');if(l)document.documentElement.dataset.theme=l;}catch(e){}</script>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -219,6 +220,12 @@
         <input id="sKey" placeholder="From Apps Script → showAppKey" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off">
       </label>
       <p class="status" id="sStatus"></p>
+      <div class="field stack look-field"><span>Light &amp; dark</span>
+        <div class="choice" id="sLook">
+          <button type="button" data-v="sun">Sun</button><button type="button" data-v="light">Light</button><button type="button" data-v="dark">Dark</button><button type="button" data-v="system">Phone</button>
+        </div>
+        <p class="rem-text" id="sLookText"></p>
+      </div>
       <div class="field palette-field"><span>Colors · new every Monday</span><span class="palette-name" id="sPalette"></span></div>
       <div class="field stack reminders" id="sReminders" hidden>
         <span>Reminders</span>
