@@ -408,10 +408,76 @@
   }
   function breakDown(t) {
     if (!t) return;
-    ask(`Break "${t.title}" into small steps and add them as sub-tasks.`);
+    const f = breakFile;
+    sendBreak(f
+      ? `Break "${t.title}" into small steps and add them as sub-tasks. Use the attached file (${f.name}) for the details.`
+      : `Break "${t.title}" into small steps and add them as sub-tasks.`);
   }
   function breakNew(title) {
-    ask(`I need to: ${title}. Add it as a task and break it into small steps as sub-tasks.`);
+    const f = breakFile;
+    if (!title && !f) return;
+    sendBreak(!f
+      ? `I need to: ${title}. Add it as a task and break it into small steps as sub-tasks.`
+      : title
+        ? `I need to: ${title}. The attached file (${f.name}) has the details. Add it as a task and break it into small steps as sub-tasks, based on the file.`
+        : `Here is a file (${f.name}). Work out what I need to do from it, add it as a task, and break it into small steps as sub-tasks.`);
+  }
+  async function sendBreak(text) {
+    const f = breakFile;
+    const ok = await ask(text, f);
+    if (ok && f && breakFile === f) setBreakFile(null);
+  }
+
+  // A photo, PDF or document to break down (an assignment sheet, a syllabus…).
+  const MAX_FILE_MB = 15;
+  let breakFile = null; // { name, type, data (base64) }
+  function setBreakFile(f) {
+    breakFile = f;
+    $('#breakFileChip').hidden = !f;
+    $('#breakFileName').textContent = f ? f.name : '';
+    $('#breakAttach').classList.toggle('on', !!f);
+    $('#breakInput').placeholder = f ? 'What’s it for? (optional)' : 'What feels too big?';
+    if (!f) $('#breakFile').value = '';
+  }
+  async function pickBreakFile(file) {
+    if (!file) return;
+    try {
+      hint('Getting your file ready…');
+      const f = /^image\//.test(file.type) ? await shrinkImage(file) : await readFileB64(file);
+      if (f.data.length * 0.75 > MAX_FILE_MB * 1024 * 1024) throw new Error(`That file is over ${MAX_FILE_MB} MB. Try a smaller one, or a photo of the page.`);
+      setBreakFile(f);
+    } catch (e) {
+      setBreakFile(null); toast(e.message || 'Couldn’t read that file.');
+    } finally { hint(''); }
+  }
+  function readFileB64(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve({ name: file.name || 'file', type: file.type || '', data: String(r.result).split(',')[1] || '' });
+      r.onerror = () => reject(new Error('Couldn’t read that file.'));
+      r.readAsDataURL(file);
+    });
+  }
+  // Phone photos are huge. Shrink to a size Claude reads just as well, as a JPEG.
+  function shrinkImage(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 2000;
+        const k = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+        const g = c.getContext('2d');
+        g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+        g.drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        const name = (file.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg';
+        resolve({ name, type: 'image/jpeg', data: c.toDataURL('image/jpeg', 0.85).split(',')[1] });
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Couldn’t open that photo. Try a screenshot of it instead.')); };
+      img.src = url;
+    });
   }
 
   // ───────────── Done today: proof of what actually got finished ─────────────
@@ -635,19 +701,23 @@
 
   // ───────────── Asking Tempo ─────────────
   let busy = false;
-  async function ask(text) {
+  async function ask(text, file) {
     text = (text || '').trim();
-    if (!text || busy) return;
+    if (!text || busy) return false;
+    if (file && !isConnected()) { toast('Connect Tempo in Settings to break down files.'); return false; }
     busy = true;
+    let ok = false;
     const mic = $('#mic');
     mic.classList.add('thinking');
     $('#prompt').value = ''; autoSize(); syncMic();
-    hint('Thinking…');
-    pushHistory('user', text);
+    hint(file ? 'Reading your file…' : 'Thinking…');
+    pushHistory('user', file ? `${text} 📎` : text);
     try {
       let res;
       if (isConnected()) {
-        res = await api('ask', { text, history: state.history.slice(0, -1).slice(-8) });
+        const payload = { text, history: state.history.slice(0, -1).slice(-8) };
+        if (file) payload.file = file;
+        res = await api('ask', payload);
       } else {
         await new Promise((r) => setTimeout(r, 900));
         res = { reply: 'This is a preview. Connect Tempo in Settings and I’ll add this to your real calendar and to-do list.', changes: [] };
@@ -655,11 +725,13 @@
       pushHistory('assistant', res.reply);
       showReply(res.reply, res.changes || []);
       render();
+      ok = true;
     } catch (e) {
       showReply(e.message, [], true);
     } finally {
       busy = false; mic.classList.remove('thinking'); hint('');
     }
+    return ok;
   }
 
   function pushHistory(role, text) {
@@ -924,9 +996,12 @@
     });
     $('#breakForm').addEventListener('submit', (e) => {
       e.preventDefault();
-      const input = $('#breakInput'); const v = input.value.trim(); if (!v) return;
+      const input = $('#breakInput'); const v = input.value.trim(); if (!v && !breakFile) return;
       input.value = ''; input.blur(); breakNew(v);
     });
+    $('#breakAttach').addEventListener('click', () => $('#breakFile').click());
+    $('#breakFile').addEventListener('change', (e) => pickBreakFile(e.target.files && e.target.files[0]));
+    $('#breakFileClear').addEventListener('click', () => setBreakFile(null));
 
     $('#nudgeGo').addEventListener('click', nudgeGo);
     $('#nudgeLater').addEventListener('click', () => { hideNudge(); toast('Good stopping point.'); });
