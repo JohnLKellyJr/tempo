@@ -81,8 +81,16 @@
           <p class="breaker-lead">Stuck on something big? Tempo splits it into tiny steps you can check off.</p>
           <form class="breaker-form" id="breakForm" autocomplete="off">
             <input id="breakInput" placeholder="What feels too big?" enterkeyhint="go" aria-label="Task to break down">
+            <button type="button" class="attach-btn" id="breakAttach" aria-label="Attach a photo or file"><svg class="ico" viewBox="0 0 24 24"><path d="M20 11.5l-7.8 7.8a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8"/></svg></button>
             <button type="submit" class="pill-btn">Break it down</button>
           </form>
+          <input type="file" id="breakFile" accept="image/*,application/pdf,.pdf,.docx,.txt,.md,text/plain" hidden>
+          <div class="break-file" id="breakFileChip" hidden>
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+            <span class="break-file-name" id="breakFileName"></span>
+            <button type="button" class="break-file-x" id="breakFileClear" aria-label="Remove file">✕</button>
+          </div>
+          <p class="breaker-tip">Tip: tap the clip to add an assignment sheet, rubric or syllabus (photo, PDF or Word file).</p>
           <div class="breaker-picks" id="breakPicks"></div>
         </div>
       </section>
@@ -212,7 +220,7 @@
         <button type="button" class="ghost-btn" id="sDisconnect">Use sample data</button>
         <button type="submit" class="primary-btn">Save &amp; connect</button>
       </div>
-      <p class="fine">Tempo talks only to your own Google Apps Script. Your web app URL and app key stay on this device. <span class="ver">Version 13</span></p>
+      <p class="fine">Tempo talks only to your own Google Apps Script. Your web app URL and app key stay on this device. <span class="ver">Version 14</span></p>
     </form>
   </section>
 

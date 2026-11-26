@@ -112,7 +112,7 @@ function doPost(e) {
         if (body.fresh) clearEventCache_();
         return json_(snapshot_());
       case 'ask':
-        return json_(ask_(String(body.text || ''), body.history || []));
+        return json_(ask_(String(body.text || ''), body.history || [], body.file || null));
       case 'addTodo':
         addTodo_(body.todo || {});
         return json_(snapshot_());
@@ -184,9 +184,10 @@ function clearEventCache_() {
 
 /* ═════════════════════════ Talking to Claude ═════════════════════════ */
 
-function ask_(text, history) {
+function ask_(text, history, file) {
   text = text.trim();
   if (!text) return { ok: false, error: 'Say or type something first.' };
+  var fileBlock = file ? fileBlock_(file) : null;
 
   var messages = [];
   (history || []).slice(-8).forEach(function (m) {
@@ -200,10 +201,10 @@ function ask_(text, history) {
   if (messages.length && messages[messages.length - 1].role === 'user') messages.pop();
   // Hand Claude the week and the to-do list up front, so it rarely needs
   // a separate "look it up" round trip (each one adds a second or two).
-  messages.push({ role: 'user', content: [
-    { type: 'text', text: contextFor_() },
-    { type: 'text', text: text }
-  ] });
+  var content = [{ type: 'text', text: contextFor_() }];
+  if (fileBlock) content.push(fileBlock);
+  content.push({ type: 'text', text: text });
+  messages.push({ role: 'user', content: content });
 
   var changes = [];
   var reply = '';
@@ -235,6 +236,53 @@ function ask_(text, history) {
   snap.reply = reply || 'Done.';
   snap.changes = changes;
   return snap;
+}
+
+/**
+ * Turns a file from "Break it down" (a photo, PDF, Word doc or text file)
+ * into something Claude can read. Photos and PDFs go as they are; Word
+ * files are unzipped here and sent as plain text.
+ */
+var MAX_FILE_BYTES = 15 * 1024 * 1024;
+function fileBlock_(file) {
+  var name = String(file.name || 'file');
+  var type = String(file.type || '').toLowerCase();
+  var data = String(file.data || '');
+  if (!data) throw new Error('That file came through empty. Try attaching it again.');
+  if (data.length * 0.75 > MAX_FILE_BYTES) throw new Error('That file is too big. Try a smaller one (under 15 MB), or a photo of the page.');
+  var block;
+  if (/^image\/(jpeg|png|gif|webp)$/.test(type)) {
+    block = { type: 'image', source: { type: 'base64', media_type: type, data: data } };
+  } else if (type === 'application/pdf' || /\.pdf$/i.test(name)) {
+    block = { type: 'document', title: name, source: { type: 'base64', media_type: 'application/pdf', data: data } };
+  } else if (/\.docx$/i.test(name) || /officedocument\.wordprocessingml/.test(type)) {
+    block = textDoc_(name, docxText_(Utilities.base64Decode(data)));
+  } else if (/^text\//.test(type) || /\.(txt|md|csv|rtf)$/i.test(name)) {
+    block = textDoc_(name, Utilities.newBlob(Utilities.base64Decode(data)).getDataAsString('UTF-8'));
+  } else {
+    throw new Error('Tempo can read photos, PDFs, Word files (.docx) and text files. Try saving it as a PDF first.');
+  }
+  // Each tool round sends the file again, so let Anthropic cache it.
+  block.cache_control = { type: 'ephemeral' };
+  return block;
+}
+function textDoc_(name, text) {
+  text = String(text || '').trim();
+  if (!text) throw new Error('Tempo couldn\'t find any text in that file. Try a PDF or a photo of it instead.');
+  return { type: 'document', title: name, source: { type: 'text', media_type: 'text/plain', data: text.slice(0, 200000) } };
+}
+function docxText_(bytes) {
+  var parts;
+  try { parts = Utilities.unzip(Utilities.newBlob(bytes, 'application/zip', 'f.zip')); }
+  catch (err) { throw new Error('Tempo couldn\'t open that Word file. Try saving it as a PDF first.'); }
+  var doc = parts.filter(function (b) { return b.getName() === 'word/document.xml'; })[0];
+  if (!doc) throw new Error('That doesn\'t look like a Word file. Try saving it as a PDF first.');
+  return doc.getDataAsString('UTF-8')
+    .replace(/<w:tab\/>/g, '\t')
+    .replace(/<w:br[^>]*\/>|<\/w:p>/g, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&')
+    .replace(/\n{3,}/g, '\n\n');
 }
 
 function callClaude_(messages) {
@@ -313,6 +361,7 @@ function systemPrompt_() {
     '- With no time, do not set remind_at. He gets a morning rundown of what is due anyway.',
     eventLead_() ? '- He also gets a phone nudge ' + eventLead_() + ' minutes before each calendar event automatically; only add a reminder for an event if he asks for a different time.' : '- Automatic event nudges are off, so add a reminder to-do if he asks to be reminded about an event.',
     '- Chris has ADHD. Starting is the hardest part, and finishing things feels great. When you break a task into steps (as sub-tasks with parent_id): make 3 to 6 steps of about 5 to 15 minutes each, start each with a verb, make the first step tiny and obvious (like "Open the doc and write the title"), set minutes on each step, and give each step the same due date as the task. Add the steps in the order he should do them. Then reply in one short, encouraging sentence that names the first step.',
+    '- Sometimes he attaches a file (a photo, PDF or document, like an assignment sheet, rubric or syllabus) to break down. Read it closely and make the steps specific to it: name the real parts, page counts, readings and requirements it lists, and use its due date if it gives one. If it lists several assignments (like a syllabus), add each upcoming one as its own task with its due date, and break only the next one due into steps. Never invent details the file does not say.',
     '- When he asks what to work on, look at his to-dos and today\'s free time and suggest one or two concrete next steps.',
     '- Only delete events or tasks when he clearly asks you to.',
     '- Times you send to tools are local times in ' + tz_() + ', formatted YYYY-MM-DDTHH:MM. Dates are YYYY-MM-DD.',
