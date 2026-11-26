@@ -1,5 +1,5 @@
 // Tempo service worker: makes the app open instantly and work offline (showing the last data it saw).
-const CACHE = 'tempo-v21';
+const CACHE = 'tempo-v22';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
