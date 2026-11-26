@@ -17,11 +17,15 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=10">
+  <link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body>
   <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
 
+  <!-- Pull down from the top to sync -->
+  <div class="ptr" id="ptr" aria-hidden="true"><span class="ptr-spin"></span><span class="ptr-text" id="ptrText">Pull to sync</span></div>
+
+  <div class="scroller" id="scroller">
   <main class="app">
     <header class="top">
       <div>
@@ -48,6 +52,7 @@
     </nav>
 
     <section class="view" id="view-today">
+      <article class="brief" id="brief" hidden></article>
       <article class="hero card" id="upNext"></article>
 
       <section class="panel p-next" aria-labelledby="hNext">
@@ -102,6 +107,7 @@
 
     <div class="dock-spacer"></div>
   </main>
+  </div>
 
   <!-- Momentum nudge: offered right after a check-off -->
   <aside class="nudge card" id="nudge" hidden aria-live="polite">
@@ -195,6 +201,7 @@
         <input id="sKey" placeholder="From Apps Script → showAppKey" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off">
       </label>
       <p class="status" id="sStatus"></p>
+      <div class="field palette-field"><span>Colors · new every Monday</span><span class="palette-name" id="sPalette"></span></div>
       <div class="field stack reminders" id="sReminders" hidden>
         <span>Reminders</span>
         <p class="rem-text" id="sRemText"></p>
@@ -205,12 +212,12 @@
         <button type="button" class="ghost-btn" id="sDisconnect">Use sample data</button>
         <button type="submit" class="primary-btn">Save &amp; connect</button>
       </div>
-      <p class="fine">Tempo talks only to your own Google Apps Script. Your web app URL and app key stay on this device. <span class="ver">Version 10</span></p>
+      <p class="fine">Tempo talks only to your own Google Apps Script. Your web app URL and app key stay on this device. <span class="ver">Version 11</span></p>
     </form>
   </section>
 
   <div class="toast" id="toast" role="status" hidden></div>
 
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>

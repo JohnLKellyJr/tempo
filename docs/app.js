@@ -54,6 +54,44 @@
     return r ? `${h} hr ${r} min` : `${h} hr`;
   }
 
+  // ───────────── Weekly colors: a new palette every Monday ─────────────
+  // The week number counts Mondays since Jan 1 2024 (a Monday), so every
+  // device picks the same palette and it changes at midnight Sunday → Monday.
+  // light/dark: the accent color for text and links in each mode.
+  // g: the three gradient stops. t: panel tints (Do this next, Focus, Break it down, Done).
+  const PALETTES = [
+    { name: 'Iris', light: '#6d5dfc', dark: '#9d90ff', a2: '#ff7a59', g: ['#7b6cff', '#c26bff', '#ff8a5c'], t: ['#7b6cff', '#ff7a59', '#2f8fff', '#1fa37a'] },
+    { name: 'Lagoon', light: '#0a74a6', dark: '#5cc8f0', a2: '#ff8a4c', g: ['#2b6fff', '#16a9c9', '#4fd1a0'], t: ['#2b7fff', '#ff8a4c', '#14a9c2', '#16a36e'] },
+    { name: 'Ember', light: '#cf4426', dark: '#ff8c6b', a2: '#7b6cff', g: ['#ff4e6a', '#ff8a3d', '#ffbf57'], t: ['#f5803a', '#7b6cff', '#e0a21b', '#1fa37a'] },
+    { name: 'Sage', light: '#23805f', dark: '#6fd3a8', a2: '#e0873a', g: ['#1e8f6e', '#46b487', '#b8d46a'], t: ['#1e8f6e', '#e0873a', '#3b82f6', '#65a30d'] },
+    { name: 'Rose', light: '#c2306a', dark: '#ff7fae', a2: '#8b5cf6', g: ['#e8487f', '#f06fa8', '#ffab76'], t: ['#e8487f', '#f58246', '#8b5cf6', '#1fa37a'] },
+    { name: 'Dusk', light: '#4f46e5', dark: '#a5a1ff', a2: '#f59e0b', g: ['#4f46e5', '#9b51e0', '#f5a00b'], t: ['#5b52f0', '#f59e0b', '#06b6d4', '#1fa37a'] }
+  ];
+  const rgb = (hex) => { const n = parseInt(hex.slice(1), 16); return `${n >> 16}, ${(n >> 8) & 255}, ${n & 255}`; };
+  function weekIndex(d) {
+    const days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(2024, 0, 1)) / 86400000);
+    return Math.floor(days / 7);
+  }
+  const paletteFor = (d) => PALETTES[((weekIndex(d) % PALETTES.length) + PALETTES.length) % PALETTES.length];
+  let paletteShown = null;
+  function applyPalette() {
+    const p = paletteFor(new Date());
+    if (paletteShown === p.name) return;
+    paletteShown = p.name;
+    const [g1, g2, g3] = p.g;
+    const common = `--accent-2:${p.a2};--a2:${rgb(p.a2)};--glow:${rgb(g2)};` +
+      `--grad:linear-gradient(135deg, ${g1} 0%, ${g2} 48%, ${g3} 100%);` +
+      `--t-next:${rgb(p.t[0])};--t-focus:${rgb(p.t[1])};--t-break:${rgb(p.t[2])};--t-done:${rgb(p.t[3])};`;
+    const light = `--accent:${p.light};--accent-soft:rgba(${rgb(p.light)}, .12);--aurora-a:rgba(${rgb(g1)}, .32);--aurora-b:rgba(${rgb(g3)}, .28);--aurora-c:rgba(${rgb(g2)}, .2);`;
+    const dark = `--accent:${p.dark};--accent-soft:rgba(${rgb(p.dark)}, .16);--aurora-a:rgba(${rgb(g1)}, .28);--aurora-b:rgba(${rgb(g3)}, .15);--aurora-c:rgba(${rgb(g2)}, .14);`;
+    let el = document.getElementById('paletteStyle');
+    if (!el) { el = document.createElement('style'); el.id = 'paletteStyle'; document.head.appendChild(el); }
+    el.textContent = `:root{${common}${light}}` +
+      `@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){${dark}}}` +
+      `:root[data-theme="dark"]{${dark}}`;
+    document.documentElement.dataset.palette = p.name.toLowerCase();
+  }
+
   // ───────────── Sample data (preview before connecting) ─────────────
   function sampleData() {
     const t = new Date(); const k = (n) => dayKey(addDays(t, n));
@@ -120,15 +158,19 @@
     return json;
   }
 
-  async function refresh(quiet) {
-    if (!isConnected()) { render(); return; }
-    try { await api('today'); render(); }
-    catch (e) { if (!quiet) toast(e.message); }
+  // fresh: ask the brain to read Google Calendar again instead of using
+  // its 90-second copy (used by pull-to-sync).
+  async function refresh(quiet, fresh) {
+    if (!isConnected()) { render(); return true; }
+    try { await api('today', fresh ? { fresh: true } : {}); render(); return true; }
+    catch (e) { if (!quiet) toast(e.message); return false; }
   }
 
   // ───────────── Rendering ─────────────
   function render() {
+    applyPalette();
     renderHeader();
+    renderBrief();
     renderToday();
     renderTasks();
     $('#demoBanner').hidden = isConnected();
@@ -184,6 +226,108 @@
     renderNextStep(d);
     renderBreaker(d);
     renderDone(d);
+  }
+
+  // ───────────── Morning brief / Evening recap ─────────────
+  // Morning (4 am to noon): the shape of the day. Evening (5 pm to midnight):
+  // what got done, what's left, and how tomorrow starts. Built on the phone
+  // from the data it already has, so it's instant and costs nothing.
+  const SUN_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></svg>';
+  const MOON_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/></svg>';
+  const FOLD_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>';
+  function briefKind(now) {
+    const h = now.getHours();
+    return h >= 4 && h < 12 ? 'morning' : h >= 17 ? 'evening' : null;
+  }
+  const eventTime = (e) => (e.all_day ? 'All day' : timeFull(parse(e.start)));
+  function eventRow(e, now) {
+    const past = !e.all_day && parse(e.end) <= now;
+    return `<li class="${past ? 'past' : ''}"><time>${esc(eventTime(e))}</time><span class="bt">${esc(e.title)}</span>${e.location ? `<span class="bm">${esc(e.location)}</span>` : ''}</li>`;
+  }
+  const byStart = (a, b) => (a.all_day === b.all_day ? a.start.localeCompare(b.start) : a.all_day ? -1 : 1);
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : (many || one + 's')}`;
+  function freeWindow(timed, now) {
+    // Longest open stretch between now (or 8 am) and 10 pm today.
+    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let cur = new Date(Math.max(now, new Date(day.getTime() + 8 * 3600000)));
+    const end = new Date(day.getTime() + 22 * 3600000);
+    let best = null;
+    const busy = timed.map((e) => [parse(e.start), parse(e.end)]).sort((a, b) => a[0] - b[0]);
+    busy.concat([[end, end]]).forEach(([s, e]) => {
+      if (s > cur) {
+        const gapEnd = s < end ? s : end;
+        if (gapEnd - cur > 0 && (!best || gapEnd - cur > best[1] - best[0])) best = [new Date(cur), gapEnd];
+      }
+      if (e > cur) cur = e;
+    });
+    return best && best[1] - best[0] >= 45 * 60000 ? best : null;
+  }
+  function renderBrief() {
+    const box = $('#brief');
+    const now = new Date();
+    const kind = briefKind(now);
+    if (!kind) { box.hidden = true; return; }
+    const d = data();
+    const today = dayKey(now);
+    const tag = `${today}:${kind}`;
+    const folded = store.get('briefFolded', '') === tag;
+    const todays = d.events.filter((e) => e.start.slice(0, 10) === today || (e.all_day && e.start.slice(0, 10) < today && e.end.slice(0, 10) > today)).sort(byStart);
+    const timed = todays.filter((e) => !e.all_day);
+    const open = topLevel(d.todos.filter((t) => !t.done));
+    const dueToday = open.filter((t) => t.due === today);
+    const overdue = open.filter((t) => t.due && t.due < today);
+    let html;
+    if (kind === 'morning') {
+      const first = timed.find((e) => parse(e.end) > now);
+      const lead = (timed.length
+        ? `${plural(timed.length, 'event')} on the calendar${first ? `, starting with ${esc(first.title)} at ${esc(timeFull(parse(first.start)))}` : ''}.`
+        : 'Nothing on the calendar. A clear runway.') +
+        (dueToday.length ? ` ${plural(dueToday.length, 'task')} due today.` : '');
+      const focus = (dueToday.length || overdue.length ? overdue.concat(dueToday) : open).slice().sort(taskOrder).slice(0, 3);
+      const win = freeWindow(timed, now);
+      html = `
+        <div class="brief-top"><p class="brief-kicker">${SUN_SVG}Morning brief</p><button class="brief-fold" data-brief-fold aria-label="${folded ? 'Show brief' : 'Hide brief'}">${FOLD_SVG}</button></div>
+        <h3>Here’s your <em>${WDL[now.getDay()]}</em>.</h3>
+        <div class="brief-body">
+          <p class="brief-lead">${lead}</p>
+          <div class="brief-stats">
+            <div><b>${timed.length}</b><span>${timed.length === 1 ? 'Event' : 'Events'}</span></div>
+            <div><b>${dueToday.length}</b><span>Due today</span></div>
+            <div class="${overdue.length ? 'warn' : ''}"><b>${overdue.length}</b><span>Overdue</span></div>
+          </div>
+          ${todays.length ? `<div class="brief-sec"><h4>Schedule</h4><ul>${todays.slice(0, 5).map((e) => eventRow(e, now)).join('')}${todays.length > 5 ? `<li class="more">+${todays.length - 5} more</li>` : ''}</ul></div>` : ''}
+          ${focus.length ? `<div class="brief-sec"><h4>Focus first</h4><ul>${focus.map((t) => `<li><time>${t.due && t.due < today ? 'Overdue' : t.due === today ? 'Today' : t.due ? esc(relDay(t.due)) : 'Anytime'}</time><span class="bt">${esc(t.title)}</span>${t.minutes ? `<span class="bm">${minText(t.minutes)}</span>` : ''}</li>`).join('')}</ul></div>` : ''}
+          ${win ? `<p class="brief-note">Best stretch for deep work: <b>${esc(timeFull(win[0]))} – ${esc(timeFull(win[1]))}</b>.</p>` : ''}
+        </div>`;
+    } else {
+      const done = doneOn(d, today);
+      const tomorrow = dayKey(addDays(now, 1));
+      const tmrEvents = d.events.filter((e) => e.start.slice(0, 10) === tomorrow).sort(byStart);
+      const tmrDue = open.filter((t) => t.due === tomorrow);
+      const left = overdue.concat(dueToday).sort(taskOrder);
+      const heldEvents = timed.filter((e) => parse(e.start) <= now).length;
+      const lead = done.length
+        ? `${heldEvents ? `${plural(heldEvents, 'event')} on the calendar and ` : ''}${plural(done.length, 'check-off')}. Every one counts.`
+        : `${heldEvents ? `${plural(heldEvents, 'event')} on the calendar. ` : ''}Nothing checked off, and that’s okay. Tomorrow’s a fresh start.`;
+      html = `
+        <div class="brief-top"><p class="brief-kicker">${MOON_SVG}Evening recap</p><button class="brief-fold" data-brief-fold aria-label="${folded ? 'Show recap' : 'Hide recap'}">${FOLD_SVG}</button></div>
+        <h3>${done.length ? `You got <em>${done.length}</em> ${done.length === 1 ? 'thing' : 'things'} done.` : 'A <em>quiet</em> day.'}</h3>
+        <div class="brief-body">
+          <p class="brief-lead">${lead}</p>
+          <div class="brief-stats">
+            <div><b>${done.length}</b><span>Done</span></div>
+            <div><b>${timed.length}</b><span>${timed.length === 1 ? 'Event' : 'Events'}</span></div>
+            <div class="${left.length ? 'warn' : ''}"><b>${left.length}</b><span>Still open</span></div>
+          </div>
+          ${done.length ? `<div class="brief-sec"><h4>Finished</h4><ul>${done.slice(0, 4).map((t) => `<li>${CHECK_SVG.replace('<svg', '<svg class="ok"')}<span class="bt">${esc(t.title)}</span><span class="bm">${esc(timeFull(parse(t.completed)))}</span></li>`).join('')}${done.length > 4 ? `<li class="more">+${done.length - 4} more</li>` : ''}</ul></div>` : ''}
+          ${left.length ? `<div class="brief-sec"><h4>Carry over</h4><ul>${left.slice(0, 3).map((t) => `<li><time>${t.due < today ? 'Overdue' : 'Today'}</time><span class="bt">${esc(t.title)}</span></li>`).join('')}${left.length > 3 ? `<li class="more">+${left.length - 3} more</li>` : ''}</ul></div>` : ''}
+          <div class="brief-sec"><h4>Tomorrow</h4><ul>${tmrEvents.length ? tmrEvents.slice(0, 3).map((e) => eventRow(e, now)).join('') : '<li class="more">Nothing on the calendar yet.</li>'}${tmrDue.length ? `<li class="more">${plural(tmrDue.length, 'task')} due</li>` : ''}</ul></div>
+        </div>`;
+    }
+    box.className = 'brief' + (folded ? ' folded' : '');
+    box.dataset.tag = tag;
+    box.innerHTML = html;
+    box.hidden = false;
   }
 
   // ───────────── Do this next: one small step, nothing else ─────────────
@@ -607,6 +751,7 @@
     s.className = 'status' + (isConnected() ? ' ok' : '');
     s.textContent = isConnected() ? 'Connected to your Tempo brain.' : 'Not connected. Showing sample data.';
     $('#sDisconnect').hidden = !isConnected();
+    $('#sPalette').innerHTML = `<span class="swatch"></span>${esc(paletteFor(new Date()).name)}`;
     renderReminderStatus();
     openSheet('settings');
   }
@@ -815,8 +960,87 @@
     ['chat', 'task', 'settings'].forEach((n) => $(`#${n}Backdrop`).addEventListener('click', closeSheets));
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheets(); });
 
+    $('#brief').addEventListener('click', (e) => {
+      if (!e.target.closest('[data-brief-fold]')) return;
+      const tag = $('#brief').dataset.tag;
+      store.set('briefFolded', store.get('briefFolded', '') === tag ? '' : tag);
+      renderBrief();
+    });
+    bindPullToSync();
+
     document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(true); });
     setInterval(() => { if (!document.hidden) render(); }, 60000); // keep countdowns fresh
+  }
+
+  // ───────────── Pull down to sync ─────────────
+  // At the top of the page, drag down and let go: Tempo re-reads Google
+  // Calendar and your tasks right now, and picks up a new app version if
+  // there is one. No need to close the app.
+  const PULL_AT = 70;
+  let syncing = false;
+  function bindPullToSync() {
+    const sc = $('#scroller'), app = $('.app'), ptr = $('#ptr'), txt = $('#ptrText');
+    let y0 = null, x0 = 0, pull = 0;
+    const sheetOpen = () => $$('.sheet').some((x) => !x.hidden);
+    const show = (p) => {
+      app.style.transform = p ? `translateY(${p}px)` : '';
+      ptr.style.transform = `translate(-50%, ${Math.min(p, PULL_AT) - 60}px)`;
+      ptr.style.opacity = String(Math.min(1, p / PULL_AT));
+      ptr.style.setProperty('--ptr-rot', `${p * 4}deg`);
+    };
+    const settle = (p) => {
+      app.classList.add('settle'); ptr.classList.add('anim'); show(p);
+      setTimeout(() => { app.classList.remove('settle'); ptr.classList.remove('anim'); }, 320);
+    };
+    sc.addEventListener('touchstart', (e) => {
+      if (syncing || sc.scrollTop > 0 || sheetOpen() || e.touches.length > 1) { y0 = null; return; }
+      y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; pull = 0;
+    }, { passive: true });
+    sc.addEventListener('touchmove', (e) => {
+      if (y0 == null) return;
+      const dy = e.touches[0].clientY - y0, dx = Math.abs(e.touches[0].clientX - x0);
+      if (dy <= 0 || sc.scrollTop > 0) { if (pull) { pull = 0; show(0); } if (dy < 0) y0 = null; return; }
+      if (!pull && dx > dy) { y0 = null; return; }
+      e.preventDefault();
+      pull = Math.min(130, dy * 0.5);
+      show(pull);
+      ptr.classList.toggle('ready', pull >= PULL_AT);
+      txt.textContent = pull >= PULL_AT ? 'Let go to sync' : 'Pull to sync';
+    }, { passive: false });
+    const end = () => {
+      if (y0 == null) return;
+      y0 = null;
+      if (pull >= PULL_AT) pullSync(); else settle(0);
+      pull = 0;
+    };
+    sc.addEventListener('touchend', end);
+    sc.addEventListener('touchcancel', end);
+
+    async function pullSync() {
+      syncing = true;
+      ptr.classList.remove('ready'); ptr.classList.add('busy');
+      txt.textContent = 'Syncing…';
+      settle(52);
+      if (navigator.vibrate) navigator.vibrate(10);
+      const [ok, updating] = await Promise.all([refresh(false, true), checkForUpdate()]);
+      if (updating) { txt.textContent = 'Updating Tempo…'; return; }
+      ptr.classList.remove('busy');
+      txt.textContent = !isConnected() ? 'Sample data' : ok ? `Synced ${timeFull(new Date())}` : 'Couldn’t sync';
+      setTimeout(() => { settle(0); syncing = false; }, 900);
+    }
+  }
+  // If a newer version of Tempo is on GitHub, switch to it now.
+  async function checkForUpdate() {
+    try {
+      if (!('serviceWorker' in navigator)) return false;
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) return false;
+      await reg.update();
+      if (!reg.installing && !reg.waiting) return false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => location.reload());
+      setTimeout(() => location.reload(), 4000);
+      return true;
+    } catch (e) { return false; }
   }
 
   // Open with ?q=... (used by the iPhone Shortcut "open in app" option) or #connect=CODE
