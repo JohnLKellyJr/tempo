@@ -94,13 +94,16 @@
       `--surface-2:rgba(${rgb(g1)}, .07);--line:rgba(${rgb(g1)}, .14);` +
       `--text-2:${mix('#5d5868', p.light, .18)};--dock:rgba(${rgb(mix('#ffffff', g2, .04))}, .92);` +
       `--aurora-a:rgba(${rgb(g1)}, .42);--aurora-b:rgba(${rgb(g3)}, .36);--aurora-c:rgba(${rgb(g2)}, .3);`;
+    // Dark mode: a deep, only lightly tinted page so the brighter, tinted
+    // cards stand clearly apart from it.
     const dark = `--accent:${p.dark};--accent-soft:rgba(${rgb(p.dark)}, .18);` +
-      `--bg:${mix('#08080d', g1, .13)};--bg-2:${mix('#0d0d15', g2, .16)};` +
-      `--surface:rgba(${rgb(mix('#14131d', g1, .2))}, .62);--surface-solid:${mix('#15141e', g1, .16)};` +
-      `--surface-2:rgba(${rgb(p.dark)}, .08);--line:rgba(${rgb(p.dark)}, .15);` +
+      `--bg:${mix('#050508', g1, .07)};--bg-2:${mix('#060609', g2, .08)};` +
+      `--surface:rgba(${rgb(mix('#1d1c28', g1, .2))}, .9);--surface-solid:${mix('#1a1925', g1, .17)};` +
+      `--surface-2:rgba(${rgb(p.dark)}, .09);--line:rgba(${rgb(p.dark)}, .2);` +
       `--text-2:${mix('#b4afc4', p.dark, .22)};--text-3:${mix('#7d788f', p.dark, .2)};` +
-      `--dock:rgba(${rgb(mix('#17161f', g1, .2))}, .92);--thumb:rgba(${rgb(p.dark)}, .2);` +
-      `--aurora-a:rgba(${rgb(g1)}, .5);--aurora-b:rgba(${rgb(g3)}, .3);--aurora-c:rgba(${rgb(g2)}, .34);`;
+      `--dock:rgba(${rgb(mix('#1d1c28', g1, .22))}, .96);--thumb:rgba(${rgb(p.dark)}, .2);` +
+      `--shadow:0 1px 0 rgba(255, 255, 255, .07) inset, 0 16px 36px -14px rgba(0, 0, 0, .9);` +
+      `--aurora-a:rgba(${rgb(g1)}, .34);--aurora-b:rgba(${rgb(g3)}, .18);--aurora-c:rgba(${rgb(g2)}, .2);`;
     let el = document.getElementById('paletteStyle');
     if (!el) { el = document.createElement('style'); el.id = 'paletteStyle'; document.head.appendChild(el); }
     el.textContent = `:root{${common}${light}}` +
@@ -109,7 +112,7 @@
     document.documentElement.dataset.palette = p.name.toLowerCase();
     // Match the phone's status bar to the tinted page.
     document.querySelectorAll('meta[name="theme-color"]').forEach((m) => {
-      m.content = (m.media || '').includes('dark') ? mix('#08080d', g1, .13) : mix('#fbf9f6', g1, .09);
+      m.content = (m.media || '').includes('dark') ? mix('#050508', g1, .07) : mix('#fbf9f6', g1, .09);
     });
   }
 

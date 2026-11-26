@@ -516,3 +516,21 @@ body::before { content: ""; position: fixed; inset: 0; z-index: 0; pointer-event
 .seg.active { color: #fff; }
 .progress .bar i { box-shadow: 0 0 10px rgba(var(--glow), .6); }
 .sheet { background: linear-gradient(180deg, rgba(var(--g1), .1), transparent 240px), var(--surface-solid); }
+
+/* Dark mode separation (v19): a calmer page wash, crisper card edges and a
+   thin light line along the top of each card so cards don't blur together. */
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --wash: .16; --edge: rgba(255, 255, 255, .1); } }
+:root[data-theme="dark"] { --wash: .16; --edge: rgba(255, 255, 255, .1); }
+:root { --edge: rgba(255, 255, 255, .6); }
+.card, .panel, .brief, .task, .dock-inner { box-shadow: inset 0 1px 0 var(--edge), var(--shadow); }
+.hero { box-shadow: inset 0 1px 0 var(--edge), 0 18px 44px -18px rgba(var(--glow), .55), var(--shadow); }
+.brief { box-shadow: inset 0 1px 0 var(--edge), 0 18px 44px -20px rgba(var(--glow), .5), var(--shadow); }
+.panel.p-next, .panel.p-focus, .panel.p-break, .panel.p-done, .panel.p-overdue, .panel.p-anytime {
+  box-shadow: inset 0 1px 0 var(--edge), 0 16px 40px -20px var(--tint-glow), var(--shadow); }
+.dock-inner { box-shadow: inset 0 1px 0 var(--edge), 0 20px 50px -20px rgba(var(--glow), .45), var(--shadow-lg); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .hero, :root:not([data-theme="light"]) .brief { border-color: rgba(var(--g2), .5); }
+  :root:not([data-theme="light"]) .panel .task { border-color: rgba(255, 255, 255, .09); }
+}
+:root[data-theme="dark"] .hero, :root[data-theme="dark"] .brief { border-color: rgba(var(--g2), .5); }
+:root[data-theme="dark"] .panel .task { border-color: rgba(255, 255, 255, .09); }
