@@ -102,6 +102,7 @@ function doPost(e) {
     if (!body.key || body.key !== secret_()) {
       return json_({ ok: false, error: 'Wrong app key. Check the App key in Tempo → Settings.' });
     }
+    useTimeZone_(body.tz);
     var action = body.action || 'ask';
     switch (action) {
       case 'ping':
@@ -573,6 +574,7 @@ function todoSheet_() {
     sh.setFrozenRows(1);
     sh.getRange('D:D').setNumberFormat('@'); // keep due dates as plain text
     sh.getRange('K:L').setNumberFormat('@');
+    sh.getRange('G:H').setNumberFormat('@');
   }
   SHEET_ = ss.getSheetByName('todos');
   // Older Sheets don't have the reminder columns yet: add their headers.
@@ -1012,7 +1014,23 @@ function secret_() {
   return s;
 }
 
-function tz_() { return Session.getScriptTimeZone(); }
+/**
+ * Tempo runs on your phone's time zone. The app sends it with every request
+ * and the brain remembers it (USER_TZ) for reminders, which run on their own.
+ * Before this, it used the Apps Script project's zone, which could be hours off.
+ */
+var TZ_ = null;
+function tz_() {
+  if (!TZ_) TZ_ = PropertiesService.getScriptProperties().getProperty('USER_TZ') || Session.getScriptTimeZone();
+  return TZ_;
+}
+function useTimeZone_(tz) {
+  if (!tz || typeof tz !== 'string' || tz.length > 64) return;
+  try { Utilities.formatDate(new Date(), tz, 'Z'); } catch (err) { return; } // not a real zone
+  TZ_ = tz;
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('USER_TZ') !== tz) props.setProperty('USER_TZ', tz);
+}
 
 function fmt_(d) { return Utilities.formatDate(d, tz_(), "yyyy-MM-dd'T'HH:mm"); }
 
@@ -1024,15 +1042,25 @@ function parseLocal_(s) {
   return Utilities.parseDate(s, tz_(), "yyyy-MM-dd'T'HH:mm");
 }
 
+// Google Sheets turns text like 2026-11-25T21:00 into a date using the
+// Sheet's own time zone, so read it back in that same zone to get the exact
+// text that was written.
+var SHEET_TZ_ = null;
+function sheetTz_() {
+  if (!SHEET_TZ_) {
+    try { SHEET_TZ_ = todoSheet_().getParent().getSpreadsheetTimeZone() || tz_(); } catch (err) { return tz_(); }
+  }
+  return SHEET_TZ_;
+}
 function normDate_(v) {
   if (!v) return '';
-  if (Object.prototype.toString.call(v) === '[object Date]') return Utilities.formatDate(v, tz_(), 'yyyy-MM-dd');
+  if (Object.prototype.toString.call(v) === '[object Date]') return Utilities.formatDate(v, sheetTz_(), 'yyyy-MM-dd');
   return String(v).slice(0, 10);
 }
 
 function normDateTime_(v) {
   if (!v) return '';
-  if (Object.prototype.toString.call(v) === '[object Date]') return fmt_(v);
+  if (Object.prototype.toString.call(v) === '[object Date]') return Utilities.formatDate(v, sheetTz_(), "yyyy-MM-dd'T'HH:mm");
   return String(v).slice(0, 16);
 }
 
