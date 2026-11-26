@@ -21,7 +21,7 @@ var DEFAULT_MODEL = 'claude-haiku-5-5';
 var API_URL = 'https://api.anthropic.com/v1/messages';
 var API_VERSION = '2026-10-21';
 var MAX_TOOL_ROUNDS = 8;
-var TODO_HEADERS = ['id', 'title', 'notes', 'due', 'priority', 'done', 'created', 'completed', 'parent', 'minutes', 'remind', 'reminded'];
+var TODO_HEADERS = ['id', 'title', 'notes', 'due', 'priority', 'done', 'created', 'completed', 'parent', 'minutes', 'remind', 'reminded', 'due_time'];
 
 // Reminder defaults. Change them without touching code by adding Script
 // Properties with the same names (Project Settings → Script Properties):
@@ -334,7 +334,7 @@ function contextFor_() {
   });
   lines.push('</his_calendar>', '<his_open_todos>');
   listTodos_(false).forEach(function (t) {
-    lines.push([t.title, t.due ? 'due ' + t.due : 'no due date', t.remind ? 'reminder ' + t.remind : '', t.priority, t.parent ? 'step of ' + t.parent : '', 'id=' + t.id].filter(String).join(' | '));
+    lines.push([t.title, t.due ? 'due ' + t.due + (t.due_time ? ' ' + t.due_time : '') : 'no due date', t.remind ? 'reminder ' + t.remind : '', t.priority, t.parent ? 'step of ' + t.parent : '', 'id=' + t.id].filter(String).join(' | '));
   });
   lines.push('</his_open_todos>');
   return lines.join('\n');
@@ -358,6 +358,7 @@ function systemPrompt_() {
     '- "Remind me to…" or "I need to…" means a to-do, not an event.',
     '- If he gives a time for the reminder ("remind me to call Mom at 5", "in 20 minutes", "tomorrow morning"), set remind_at on the to-do (and due to that day). His phone gets a notification then. "Morning" means 8:00, "afternoon" 14:00, "evening" 19:00, "tonight" 20:00.',
     '- "Remind me 30 minutes before my dentist appointment" means a to-do (e.g. "Leave for dentist") with remind_at 30 minutes before that event starts.',
+    '- A due time ("due Friday at 5pm", "by 3 tomorrow") goes in due_time as 24-hour HH:MM, with due set to that day. Only set due_time when he gives a time for when it is due; a reminder time alone is remind_at.',
     '- With no time, do not set remind_at. He gets a morning rundown of what is due anyway.',
     eventLead_() ? '- He also gets a phone nudge ' + eventLead_() + ' minutes before each calendar event automatically; only add a reminder for an event if he asks for a different time.' : '- Automatic event nudges are off, so add a reminder to-do if he asks to be reminded about an event.',
     '- Chris has ADHD. Starting is the hardest part, and finishing things feels great. When you break a task into steps (as sub-tasks with parent_id): make 3 to 6 steps of about 5 to 15 minutes each, start each with a verb, make the first step tiny and obvious (like "Open the doc and write the title"), set minutes on each step, and give each step the same due date as the task. Add the steps in the order he should do them. Then reply in one short, encouraging sentence that names the first step.',
@@ -444,6 +445,7 @@ var TOOLS = [
       properties: {
         title: { type: 'string' },
         due: { type: 'string', description: 'Due date YYYY-MM-DD' },
+        due_time: { type: 'string', description: 'Time it is due, 24-hour HH:MM. Only when he gives one.' },
         priority: { type: 'string', enum: ['high', 'normal', 'low'] },
         notes: { type: 'string' },
         minutes: { type: 'integer', description: 'Estimated minutes to finish' },
@@ -462,6 +464,7 @@ var TOOLS = [
         id: { type: 'string' },
         title: { type: 'string' },
         due: { type: 'string', description: 'YYYY-MM-DD, or empty string to clear' },
+        due_time: { type: 'string', description: 'Time it is due, 24-hour HH:MM, or empty string to clear' },
         priority: { type: 'string', enum: ['high', 'normal', 'low'] },
         notes: { type: 'string' },
         minutes: { type: 'integer' },
@@ -508,16 +511,16 @@ function runTool_(name, input, changes) {
       return listTodos_(!!input.include_done);
     case 'add_todo': {
       var t = addTodo_({
-        title: input.title, due: input.due, priority: input.priority,
+        title: input.title, due: input.due, due_time: input.due_time, priority: input.priority,
         notes: input.notes, minutes: input.minutes, parent: input.parent_id, remind: input.remind_at
       });
-      changes.push({ type: 'todo', verb: 'added', title: t.title, when: t.remind ? 'reminder ' + niceTime_(t.remind) : (t.due || ''), sub: !!t.parent });
+      changes.push({ type: 'todo', verb: 'added', title: t.title, when: t.remind ? 'reminder ' + niceTime_(t.remind) : (t.due ? t.due + (t.due_time ? ' ' + t.due_time : '') : ''), sub: !!t.parent });
       return t;
     }
     case 'update_todo': {
       if (input.remind_at != null) input.remind = input.remind_at;
       var u = updateTodo_(input);
-      changes.push({ type: 'todo', verb: input.done ? 'completed' : 'updated', title: u.title, when: u.due || '', sub: !!u.parent });
+      changes.push({ type: 'todo', verb: input.done ? 'completed' : 'updated', title: u.title, when: u.due ? u.due + (u.due_time ? ' ' + u.due_time : '') : '', sub: !!u.parent });
       return u;
     }
     case 'delete_todo': {
@@ -627,12 +630,13 @@ function todoSheet_() {
     sh.getRange('D:D').setNumberFormat('@'); // keep due dates as plain text
     sh.getRange('K:L').setNumberFormat('@');
     sh.getRange('G:H').setNumberFormat('@');
+    sh.getRange('M:M').setNumberFormat('@');
   }
   SHEET_ = ss.getSheetByName('todos');
   // Older Sheets don't have the reminder columns yet: add their headers.
   if (SHEET_.getRange(1, TODO_HEADERS.length).getValue() !== TODO_HEADERS[TODO_HEADERS.length - 1]) {
     SHEET_.getRange(1, 1, 1, TODO_HEADERS.length).setValues([TODO_HEADERS]).setFontWeight('bold');
-    SHEET_.getRange('K:L').setNumberFormat('@'); // keep reminder times as plain text
+    SHEET_.getRange('K:M').setNumberFormat('@'); // keep reminder and due times as plain text
   }
   return SHEET_;
 }
@@ -656,7 +660,8 @@ function readTodos_() {
       parent: String(r[8] || ''),
       minutes: r[9] ? Number(r[9]) : null,
       remind: normDateTime_(r[10]),
-      reminded: normDateTime_(r[11])
+      reminded: normDateTime_(r[11]),
+      due_time: normTime_(r[12])
     };
   }).filter(function (t) { return t.id; });
 }
@@ -684,8 +689,10 @@ function addTodo_(t) {
       parent: t.parent || '',
       minutes: t.minutes || '',
       remind: cleanRemind_(t.remind),
-      reminded: ''
+      reminded: '',
+      due_time: ''
     };
+    if (todo.due) todo.due_time = normTime_(t.due_time);
     if (todo.remind && !todo.due) todo.due = todo.remind.slice(0, 10);
     todoSheet_().appendRow(TODO_HEADERS.map(function (h) { return todo[h]; }));
     return todo;
@@ -699,6 +706,8 @@ function updateTodo_(t) {
     if (!todo) throw new Error('No to-do with id ' + t.id);
     ['title', 'notes', 'priority', 'minutes'].forEach(function (k) { if (t[k] != null) todo[k] = t[k]; });
     if (t.due != null) todo.due = String(t.due).slice(0, 10);
+    if (t.due_time != null) todo.due_time = normTime_(t.due_time);
+    if (!todo.due) todo.due_time = '';
     if (t.remind != null) {
       var newRemind = cleanRemind_(t.remind);
       if (newRemind !== todo.remind) todo.reminded = ''; // a new time means a new nudge
@@ -1108,6 +1117,15 @@ function normDate_(v) {
   if (!v) return '';
   if (Object.prototype.toString.call(v) === '[object Date]') return Utilities.formatDate(v, sheetTz_(), 'yyyy-MM-dd');
   return String(v).slice(0, 10);
+}
+
+// A due time as 24-hour HH:MM, or '' if there isn't a valid one.
+function normTime_(v) {
+  if (!v) return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') return Utilities.formatDate(v, sheetTz_(), 'HH:mm');
+  var m = String(v).match(/(\d{1,2}):(\d{2})/);
+  if (!m || +m[1] > 23 || +m[2] > 59) return '';
+  return ('0' + m[1]).slice(-2) + ':' + m[2];
 }
 
 function normDateTime_(v) {
