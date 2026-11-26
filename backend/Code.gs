@@ -27,8 +27,10 @@ var TODO_HEADERS = ['id', 'title', 'notes', 'due', 'priority', 'done', 'created'
 // Properties with the same names (Project Settings → Script Properties):
 //   EVENT_REMINDER_MINUTES  minutes before each calendar event (0 = off)
 //   MORNING_HOUR            hour for the morning rundown, 0–23 ("off" = off)
+//   EVENING_HOUR            hour for the evening recap, 0–23 ("off" = off)
 var DEFAULT_EVENT_REMINDER_MINUTES = 15;
 var DEFAULT_MORNING_HOUR = 8;
+var DEFAULT_EVENING_HOUR = 20;
 
 /* ═════════════════════════ One-time setup ═════════════════════════ */
 
@@ -105,6 +107,8 @@ function doPost(e) {
       case 'ping':
         return json_({ ok: true, timezone: tz_() });
       case 'today':
+        // Pull-to-refresh asks for "fresh": read Google Calendar again now.
+        if (body.fresh) clearEventCache_();
         return json_(snapshot_());
       case 'ask':
         return json_(ask_(String(body.text || ''), body.history || []));
@@ -688,6 +692,7 @@ function sendReminders() {
   safely_('to-do reminders', function () { sendTodoReminders_(now); });
   safely_('event reminders', function () { sendEventReminders_(now, props); });
   safely_('morning rundown', function () { sendMorning_(now, props); });
+  safely_('evening recap', function () { sendEvening_(now, props); });
 }
 
 function safely_(what, fn) {
@@ -776,6 +781,37 @@ function morningRundown_(today) {
   if (dueToday.length) lines.push('Due today: ' + dueToday.slice(0, 3).map(function (t) { return t.title; }).join(', ') + (dueToday.length > 3 ? ' +' + (dueToday.length - 3) + ' more' : '') + '.');
   if (overdue.length) lines.push(overdue.length + ' overdue: ' + overdue[0].title + (overdue.length > 1 ? ' and more' : '') + '.');
   return lines.join('\n');
+}
+
+/** Evening recap, once a day: what got done, what's left, and tomorrow. */
+function sendEvening_(now, props) {
+  var hour = hourProp_('EVENING_HOUR', DEFAULT_EVENING_HOUR);
+  var today = fmt_(now).slice(0, 10);
+  var h = Number(Utilities.formatDate(now, tz_(), 'H'));
+  if (hour != null && h >= hour && h < hour + 3 && props.getProperty('LAST_EVENING') !== today) {
+    props.setProperty('LAST_EVENING', today);
+    notify_({ title: 'Your day, wrapped up', message: eveningRecap_(today) });
+  }
+}
+
+function eveningRecap_(today) {
+  var all = readTodos_();
+  var done = all.filter(function (t) { return t.done && t.completed && t.completed.slice(0, 10) === today; });
+  var left = all.filter(function (t) { return !t.done && !t.parent && t.due && t.due <= today; });
+  var tomorrow = fmt_(new Date(parseLocal_(today + 'T12:00').getTime() + 86400000)).slice(0, 10);
+  var first = weekEvents_().filter(function (e) { return e.start.slice(0, 10) === tomorrow && !e.all_day; })[0];
+  var lines = [];
+  lines.push(done.length ? 'You finished ' + done.length + (done.length === 1 ? ' thing' : ' things') + ' today. Nice work.' : 'A quiet day. Tomorrow is a fresh start.');
+  if (left.length) lines.push('Still open: ' + left[0].title + (left.length > 1 ? ' +' + (left.length - 1) + ' more' : '') + '.');
+  if (first) lines.push('Tomorrow starts with ' + first.title + ' at ' + niceTime_(first.start).replace(/^\w+ /, '') + '.');
+  return lines.join('\n');
+}
+
+function hourProp_(name, dflt) {
+  var v = PropertiesService.getScriptProperties().getProperty(name);
+  if (v == null || v === '') return dflt;
+  var n = Number(v);
+  return isNaN(n) || n < 0 || n > 23 ? null : n;
 }
 
 /** Sends a notification to every device with Tempo notifications on. */

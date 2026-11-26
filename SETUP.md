@@ -115,6 +115,7 @@ Want them on your Mac too? Do step 4 in Tempo on the Mac as well.
 |---|---|---|
 | `EVENT_REMINDER_MINUTES` | Minutes before each event. `0` turns event nudges off (handy if Outlook already alerts you). | `15` |
 | `MORNING_HOUR` | Hour of the morning rundown, `0` to `23`. `off` turns it off. | `8` |
+| `EVENING_HOUR` | Hour of the evening recap (what you got done, what’s left, and tomorrow’s first event), `0` to `23`. `off` turns it off. | `20` |
 
 To turn all reminders off, run `stopReminders`.
 
