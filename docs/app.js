@@ -129,6 +129,8 @@
   const data = () => (isConnected() && state.data && !state.data.sample ? state.data : (state._sample = state._sample || sampleData()));
 
   // ───────────── Backend ─────────────
+  // The phone's time zone, so the brain stamps times the way you see them.
+  const LOCAL_TZ = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { return ''; } })();
   async function api(action, payload = {}) {
     if (!isConnected()) throw new Error('Not connected');
     let res;
@@ -137,7 +139,7 @@
       method: 'POST',
       // text/plain avoids a CORS pre-flight, which Apps Script does not answer.
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(Object.assign({ key: state.conn.key, action }, payload)),
+      body: JSON.stringify(Object.assign({ key: state.conn.key, action, tz: LOCAL_TZ }, payload)),
       redirect: 'follow'
       });
     } catch (e) {
@@ -187,7 +189,7 @@
     const d = data();
     const today = dayKey(now);
     const todays = d.events.filter((e) => e.start.slice(0, 10) === today && parse(e.end) > now);
-    const open = d.todos.filter((t) => !t.done);
+    const open = topLevel(d.todos.filter((t) => !t.done));
     const dueToday = open.filter((t) => t.due && t.due <= today);
     const bits = [];
     bits.push(todays.length ? `${todays.length} ${todays.length === 1 ? 'event' : 'events'} left today` : 'Nothing else on the calendar today');
