@@ -88,22 +88,17 @@
     const common = `--accent-2:${p.a2};--a2:${rgb(p.a2)};--glow:${rgb(g2)};--g1:${rgb(g1)};--g2:${rgb(g2)};--g3:${rgb(g3)};` +
       `--grad:linear-gradient(135deg, ${g1} 0%, ${g2} 48%, ${g3} 100%);` +
       `--t-next:${rgb(p.t[0])};--t-focus:${rgb(p.t[1])};--t-break:${rgb(p.t[2])};--t-done:${rgb(p.t[3])};`;
-    const light = `--accent:${p.light};--accent-soft:rgba(${rgb(p.light)}, .13);` +
-      `--bg:${mix('#fbf9f6', g1, .09)};--bg-2:${mix('#f6f3ee', g2, .12)};` +
-      `--surface:rgba(${rgb(mix('#ffffff', g2, .04))}, .7);--surface-solid:${mix('#ffffff', g2, .025)};` +
-      `--surface-2:rgba(${rgb(g1)}, .07);--line:rgba(${rgb(g1)}, .14);` +
-      `--text-2:${mix('#5d5868', p.light, .18)};--dock:rgba(${rgb(mix('#ffffff', g2, .04))}, .92);` +
-      `--aurora-a:rgba(${rgb(g1)}, .42);--aurora-b:rgba(${rgb(g3)}, .36);--aurora-c:rgba(${rgb(g2)}, .3);`;
-    // Dark mode: a deep, only lightly tinted page so the brighter, tinted
-    // cards stand clearly apart from it.
-    const dark = `--accent:${p.dark};--accent-soft:rgba(${rgb(p.dark)}, .18);` +
-      `--bg:${mix('#050508', g1, .07)};--bg-2:${mix('#060609', g2, .08)};` +
-      `--surface:rgba(${rgb(mix('#1d1c28', g1, .2))}, .9);--surface-solid:${mix('#1a1925', g1, .17)};` +
-      `--surface-2:rgba(${rgb(p.dark)}, .09);--line:rgba(${rgb(p.dark)}, .2);` +
-      `--text-2:${mix('#b4afc4', p.dark, .22)};--text-3:${mix('#7d788f', p.dark, .2)};` +
-      `--dock:rgba(${rgb(mix('#1d1c28', g1, .22))}, .96);--thumb:rgba(${rgb(p.dark)}, .2);` +
-      `--shadow:0 1px 0 rgba(255, 255, 255, .07) inset, 0 16px 36px -14px rgba(0, 0, 0, .9);` +
-      `--aurora-a:rgba(${rgb(g1)}, .34);--aurora-b:rgba(${rgb(g3)}, .18);--aurora-c:rgba(${rgb(g2)}, .2);`;
+    // Surfaces stay neutral; only a whisper of the theme color reaches them.
+    const light = `--accent:${p.light};--accent-soft:rgba(${rgb(p.light)}, .12);` +
+      `--bg:${mix('#f7f6f3', g1, .025)};--line:rgba(20, 16, 40, .09);` +
+      `--aurora-a:rgba(${rgb(g1)}, .3);--aurora-b:rgba(${rgb(g3)}, .22);--aurora-c:rgba(${rgb(g2)}, .16);`;
+    const dark = `--accent:${p.dark};--accent-soft:rgba(${rgb(p.dark)}, .15);` +
+      `--bg:${mix('#09090c', g1, .025)};--bg-2:#0e0e12;` +
+      `--surface:rgba(${rgb(mix('#17171c', g1, .03))}, .92);--surface-solid:${mix('#18181d', g1, .03)};` +
+      `--surface-2:rgba(255, 255, 255, .045);--line:rgba(255, 255, 255, .085);` +
+      `--text-2:#b3b1bb;--text-3:#7c7a86;--dock:rgba(${rgb(mix('#1a1a20', g1, .03))}, .95);` +
+      `--shadow:0 1px 0 rgba(255, 255, 255, .05) inset, 0 14px 32px -14px rgba(0, 0, 0, .85);` +
+      `--aurora-a:rgba(${rgb(g1)}, .28);--aurora-b:rgba(${rgb(g3)}, .12);--aurora-c:rgba(${rgb(g2)}, .14);`;
     let el = document.getElementById('paletteStyle');
     if (!el) { el = document.createElement('style'); el.id = 'paletteStyle'; document.head.appendChild(el); }
     el.textContent = `:root{${common}${light}}` +
@@ -112,7 +107,7 @@
     document.documentElement.dataset.palette = p.name.toLowerCase();
     // Match the phone's status bar to the tinted page.
     document.querySelectorAll('meta[name="theme-color"]').forEach((m) => {
-      m.content = (m.media || '').includes('dark') ? mix('#050508', g1, .07) : mix('#fbf9f6', g1, .09);
+      m.content = (m.media || '').includes('dark') ? mix('#09090c', g1, .025) : mix('#f7f6f3', g1, .025);
     });
   }
 

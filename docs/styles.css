@@ -449,88 +449,37 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .palette-field .palette-name { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; }
 .palette-field .swatch { width: 16px; height: 16px; border-radius: 50%; background: var(--grad); }
 
-/* ───────────── Richer themes (v19) ─────────────
-   The week's colors wash the whole page, cards carry a real tint of their
-   section color, and buttons glow. app.js sets --g1/--g2/--g3 per theme. */
-:root { --g1: 123, 108, 255; --g2: 194, 107, 255; --g3: 255, 138, 92; --wash: .2; --tint-k: 1; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --wash: .26; --tint-k: 1.25; } }
-:root[data-theme="dark"] { --wash: .26; --tint-k: 1.25; }
+/* ───────────── Clean themes with accents (v19) ─────────────
+   Calm, neutral cards and page; the week's colors show up only as accents:
+   a soft glow at the top, thin colored lines, icons, buttons and the mic.
+   app.js sets --g1/--g2/--g3 per theme. */
+:root { --g1: 123, 108, 255; --g2: 194, 107, 255; --g3: 255, 138, 92; --edge: rgba(255, 255, 255, .8); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --edge: rgba(255, 255, 255, .06); } }
+:root[data-theme="dark"] { --edge: rgba(255, 255, 255, .06); }
 
-/* A soft color wash behind everything, top and bottom of the screen. */
-body::before { content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
-  background:
-    radial-gradient(90% 55% at 0% 0%, rgba(var(--g1), var(--wash)), transparent 70%),
-    radial-gradient(80% 45% at 100% 30%, rgba(var(--g2), calc(var(--wash) * .6)), transparent 70%),
-    radial-gradient(100% 50% at 50% 105%, rgba(var(--g3), calc(var(--wash) * .75)), transparent 70%),
-    linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%); }
-.aurora { height: 80vh; filter: blur(50px); }
+/* Just a hint of the week's color behind the header. */
+.aurora { height: 46vh; opacity: .55; }
 
-/* Header */
-.greeting em { filter: drop-shadow(0 4px 18px rgba(var(--glow), .45)); }
-.icon-btn { color: var(--accent); }
-
-/* Up next card: a bold gradient wash with a glow. */
-.hero { border-color: rgba(var(--g2), .35); box-shadow: 0 18px 44px -18px rgba(var(--glow), .55), var(--shadow); }
-.hero::before { opacity: .2; }
-.hero::after { content: ""; position: absolute; right: -40px; top: -50px; width: 180px; height: 180px; border-radius: 50%; background: rgba(var(--g3), .35); filter: blur(40px); pointer-events: none; }
-.hero > * { position: relative; }
-.hero .countdown { background: rgba(var(--g1), .14); border-color: rgba(var(--g1), .28); }
-
-/* Morning brief / evening recap */
-.brief { border-color: rgba(var(--g2), .3); box-shadow: 0 18px 44px -20px rgba(var(--glow), .5), var(--shadow); }
-.brief::before { opacity: .16; }
-.brief::after { height: 2px; opacity: 1; }
-
-/* Section panels: tinted from top to bottom, colored border and glow. */
-.panel.p-next, .panel.p-focus, .panel.p-break, .panel.p-done, .panel.p-overdue, .panel.p-anytime {
-  background-image: linear-gradient(160deg, var(--tint-bg-strong) 0%, var(--tint-bg) 70%);
-  box-shadow: 0 16px 40px -20px var(--tint-glow), var(--shadow); }
-.panel.p-next { --tint-bg-strong: rgba(var(--t-next), calc(.2 * var(--tint-k))); --tint-bg: rgba(var(--t-next), calc(.07 * var(--tint-k))); --tint-line: rgba(var(--t-next), .45); --tint-soft: rgba(var(--t-next), .2); --tint-glow: rgba(var(--t-next), .55); }
-.panel.p-focus { --tint-bg-strong: rgba(var(--t-focus), calc(.2 * var(--tint-k))); --tint-bg: rgba(var(--t-focus), calc(.07 * var(--tint-k))); --tint-line: rgba(var(--t-focus), .45); --tint-soft: rgba(var(--t-focus), .2); --tint-glow: rgba(var(--t-focus), .55); }
-.panel.p-break { --tint-bg-strong: rgba(var(--t-break), calc(.2 * var(--tint-k))); --tint-bg: rgba(var(--t-break), calc(.07 * var(--tint-k))); --tint-line: rgba(var(--t-break), .45); --tint-soft: rgba(var(--t-break), .2); --tint-glow: rgba(var(--t-break), .55); }
-.panel.p-done { --tint-bg-strong: rgba(var(--t-done), calc(.2 * var(--tint-k))); --tint-bg: rgba(var(--t-done), calc(.07 * var(--tint-k))); --tint-line: rgba(var(--t-done), .45); --tint-soft: rgba(var(--t-done), .2); --tint-glow: rgba(var(--t-done), .55); }
-.panel.p-overdue { --tint-bg-strong: rgba(229, 72, 77, calc(.2 * var(--tint-k))); --tint-glow: rgba(229, 72, 77, .5); }
-.panel.p-anytime { --tint-bg-strong: rgba(138, 133, 160, calc(.16 * var(--tint-k))); --tint-glow: rgba(138, 133, 160, .35); }
-.panel::before { height: 3px; background: linear-gradient(90deg, var(--tint), transparent); }
-.panel-ico { background: var(--tint-soft); color: var(--tint); box-shadow: 0 0 18px -4px var(--tint-glow); }
-.panel-head h2 { color: var(--text); }
-/* Rows inside a panel take on a light version of its color. */
-.panel .task { background: linear-gradient(var(--tint-bg), var(--tint-bg)), var(--surface-solid); border-color: rgba(127, 127, 127, .14); }
-.panel .task.sub { background: linear-gradient(var(--tint-bg), var(--tint-bg)), var(--surface); }
-.panel .breaker-form { background: linear-gradient(var(--tint-bg), var(--tint-bg)), var(--surface-solid); border-color: var(--tint-line); }
-.panel .check { border-color: var(--tint); }
-.panel .check.on { box-shadow: 0 0 12px -2px var(--tint-glow); }
-.done-list li > svg { box-shadow: 0 0 12px -2px rgba(var(--glow), .6); }
-
-/* Plain cards and task rows in the Tasks view */
-.card { border-color: rgba(var(--g1), .2); }
-.task { border-color: rgba(var(--g1), .16); }
-.task .check.on { box-shadow: 0 0 12px -2px rgba(var(--glow), .6); }
-
-/* Buttons and the mic glow a little more. */
-.ns-done { box-shadow: 0 10px 26px -8px rgba(var(--glow), .85); }
-.mic { box-shadow: 0 10px 28px -6px rgba(var(--glow), .9), 0 0 0 4px rgba(var(--glow), .12); }
-.dock-inner { border-color: rgba(var(--g1), .25); box-shadow: 0 20px 50px -20px rgba(var(--glow), .45), var(--shadow-lg); }
-.segmented { background: rgba(var(--g1), .1); border-color: rgba(var(--g1), .2); }
-.seg-thumb { background: var(--grad); box-shadow: 0 6px 18px -6px rgba(var(--glow), .7); }
-.seg.active { color: #fff; }
-.progress .bar i { box-shadow: 0 0 10px rgba(var(--glow), .6); }
-.sheet { background: linear-gradient(180deg, rgba(var(--g1), .1), transparent 240px), var(--surface-solid); }
-
-/* Dark mode separation (v19): a calmer page wash, crisper card edges and a
-   thin light line along the top of each card so cards don't blur together. */
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --wash: .16; --edge: rgba(255, 255, 255, .1); } }
-:root[data-theme="dark"] { --wash: .16; --edge: rgba(255, 255, 255, .1); }
-:root { --edge: rgba(255, 255, 255, .6); }
+/* Cards: neutral, with a crisp edge and a clear shadow so they stand apart. */
 .card, .panel, .brief, .task, .dock-inner { box-shadow: inset 0 1px 0 var(--edge), var(--shadow); }
-.hero { box-shadow: inset 0 1px 0 var(--edge), 0 18px 44px -18px rgba(var(--glow), .55), var(--shadow); }
-.brief { box-shadow: inset 0 1px 0 var(--edge), 0 18px 44px -20px rgba(var(--glow), .5), var(--shadow); }
-.panel.p-next, .panel.p-focus, .panel.p-break, .panel.p-done, .panel.p-overdue, .panel.p-anytime {
-  box-shadow: inset 0 1px 0 var(--edge), 0 16px 40px -20px var(--tint-glow), var(--shadow); }
-.dock-inner { box-shadow: inset 0 1px 0 var(--edge), 0 20px 50px -20px rgba(var(--glow), .45), var(--shadow-lg); }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .hero, :root:not([data-theme="light"]) .brief { border-color: rgba(var(--g2), .5); }
-  :root:not([data-theme="light"]) .panel .task { border-color: rgba(255, 255, 255, .09); }
-}
-:root[data-theme="dark"] .hero, :root[data-theme="dark"] .brief { border-color: rgba(var(--g2), .5); }
-:root[data-theme="dark"] .panel .task { border-color: rgba(255, 255, 255, .09); }
+.greeting em { filter: none; }
+
+/* Up next: neutral card, a thin gradient line on top and a faint wash. */
+.hero::before { opacity: .06; }
+.hero::after { content: ""; position: absolute; left: 20px; right: 20px; top: 0; height: 2px; border-radius: 2px; background: var(--grad); }
+.hero > * { position: relative; }
+.brief::before { opacity: .04; }
+
+/* Section panels: no color fill, a short colored line and colored icon. */
+.panel, .panel.p-next, .panel.p-focus, .panel.p-break, .panel.p-done, .panel.p-overdue, .panel.p-anytime {
+  background-image: none; border-color: var(--line); }
+.panel::before { left: 18px; right: auto; width: 56px; height: 3px; border-radius: 0 0 3px 3px; background: var(--tint); }
+.panel-ico { background: var(--tint-soft); border-color: transparent; color: var(--tint); }
+.panel .task, .panel .task.sub, .panel .breaker-form { background: var(--surface-2); border-color: var(--line); box-shadow: none; }
+
+/* Accents that pop against the calm background. */
+.ns-done { box-shadow: 0 8px 22px -8px rgba(var(--glow), .75); }
+.mic { box-shadow: 0 8px 24px -6px rgba(var(--glow), .8); }
+.task .check.on, .done-list li > svg { box-shadow: 0 0 10px -2px rgba(var(--glow), .55); }
+.progress .bar i { box-shadow: 0 0 8px rgba(var(--glow), .5); }
+.seg.active { color: var(--accent); }
