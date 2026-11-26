@@ -778,14 +778,26 @@
     const box = $('#reply');
     $('#replyText').textContent = text;
     $('#replyText').classList.toggle('err', !!isErr);
-    $('#replyChips').innerHTML = (changes || []).map((c) =>
-      `<span class="chip">${CHIP_ICONS[c.type] || ''}<span>${esc(cap(c.verb))} <b>${esc(c.title)}</b>${c.when ? ' · ' + esc(c.type === 'todo' && /^\d{4}-/.test(c.when) ? relDay(c.when) : c.when) : ''}</span></span>`).join('');
+    // Keep it short: the main changes only, with steps folded into one chip.
+    const all = changes || [];
+    const main = all.filter((c) => !c.sub), subs = all.filter((c) => c.sub);
+    const MAX_CHIPS = 3;
+    const chip = (inner, type) => `<span class="chip">${CHIP_ICONS[type] || ''}<span>${inner}</span></span>`;
+    let html = main.slice(0, MAX_CHIPS).map((c) =>
+      chip(`${esc(cap(c.verb))} <b>${esc(c.title)}</b>${c.when ? ' · ' + esc(c.type === 'todo' && /^\d{4}-/.test(c.when) ? relDay(c.when) : c.when) : ''}`, c.type)).join('');
+    if (main.length > MAX_CHIPS) html += chip(`+${main.length - MAX_CHIPS} more`, 'todo');
+    if (subs.length) {
+      const verb = subs.every((c) => c.verb === subs[0].verb) ? subs[0].verb : 'updated';
+      html += chip(`${esc(cap(verb))} <b>${subs.length} step${subs.length === 1 ? '' : 's'}</b>`, 'todo');
+    }
+    $('#replyChips').innerHTML = html;
     box.hidden = false;
     $('#replyBody').scrollTop = 0;
     box.style.animation = 'none'; void box.offsetWidth; box.style.animation = '';
     clearTimeout(showReply._t);
     // Short replies fade on their own. Long ones stay until you close them.
     const long = $('#replyBody').scrollHeight > $('#replyBody').clientHeight + 4;
+    $('#replyMore').hidden = !long;
     if (!isErr && !long) showReply._t = setTimeout(hideReply, 12000);
   }
   function hideReply() { clearTimeout(showReply._t); $('#reply').hidden = true; }
@@ -1015,6 +1027,7 @@
     $('#dockFileClear').addEventListener('click', () => setDockFile(null));
 
     $('#closeReply').addEventListener('click', hideReply);
+    $('#replyMore').addEventListener('click', () => { hideReply(); renderChat(); openSheet('chat'); });
     // Reading it? Don't let it vanish mid-sentence.
     $('#reply').addEventListener('touchstart', () => clearTimeout(showReply._t), { passive: true });
     $('#reply').addEventListener('wheel', () => clearTimeout(showReply._t), { passive: true });

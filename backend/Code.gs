@@ -364,6 +364,7 @@ function systemPrompt_() {
     '- Sometimes he attaches a file (a photo, PDF or document, like an assignment sheet, rubric, syllabus, flyer or schedule). Read it closely and use what it actually says. Never invent details the file does not say.',
     '- File to break down: make the steps specific to it: name the real parts, page counts, readings and requirements it lists, and use its due date if it gives one. If it lists several assignments (like a syllabus), add each upcoming one as its own task with its due date, and break only the next one due into steps.',
     '- File with any other request: do what he asks using the file. With no clear ask, add what it calls for: a flyer or invitation becomes a calendar event with its date, time and place (put the place in location); a syllabus or schedule becomes tasks or events for the upcoming dates. Skip dates that have already passed.',
+    '- When you change a task that has steps (like moving its due date), update its steps to match without being asked, but in your reply only mention the main task (e.g. "Moved Bio lab report to Fri, steps too."). Only list or name individual steps when he asks about them or you just made a new breakdown, and even then name only the first step.',
     '- When he asks what to work on, look at his to-dos and today\'s free time and suggest one or two concrete next steps.',
     '- Only delete events or tasks when he clearly asks you to.',
     '- Times you send to tools are local times in ' + tz_() + ', formatted YYYY-MM-DDTHH:MM. Dates are YYYY-MM-DD.',
@@ -510,13 +511,13 @@ function runTool_(name, input, changes) {
         title: input.title, due: input.due, priority: input.priority,
         notes: input.notes, minutes: input.minutes, parent: input.parent_id, remind: input.remind_at
       });
-      changes.push({ type: 'todo', verb: 'added', title: t.title, when: t.remind ? 'reminder ' + niceTime_(t.remind) : (t.due || '') });
+      changes.push({ type: 'todo', verb: 'added', title: t.title, when: t.remind ? 'reminder ' + niceTime_(t.remind) : (t.due || ''), sub: !!t.parent });
       return t;
     }
     case 'update_todo': {
       if (input.remind_at != null) input.remind = input.remind_at;
       var u = updateTodo_(input);
-      changes.push({ type: 'todo', verb: input.done ? 'completed' : 'updated', title: u.title, when: u.due || '' });
+      changes.push({ type: 'todo', verb: input.done ? 'completed' : 'updated', title: u.title, when: u.due || '', sub: !!u.parent });
       return u;
     }
     case 'delete_todo': {
