@@ -460,7 +460,7 @@
     $('#dockFileChip').hidden = !f;
     $('#dockFileName').textContent = f ? f.name : '';
     $('#dockAttach').classList.toggle('on', !!f);
-    $('#prompt').placeholder = f ? 'What should Tempo do with it?' : 'Ask Tempo to plan something…';
+    $('#prompt').placeholder = f ? 'Ask Tempo about it' : 'Ask Tempo';
     if (!f) $('#dockFile').value = '';
     syncMic();
   }
