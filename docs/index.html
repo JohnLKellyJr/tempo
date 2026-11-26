@@ -145,7 +145,14 @@
 
   <!-- Composer -->
   <form class="dock" id="composer" autocomplete="off">
+    <div class="break-file dock-file" id="dockFileChip" hidden>
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+      <span class="break-file-name" id="dockFileName"></span>
+      <button type="button" class="break-file-x" id="dockFileClear" aria-label="Remove file">✕</button>
+    </div>
+    <input type="file" id="dockFile" accept="image/*,application/pdf,.pdf,.docx,.txt,.md,text/plain" hidden>
     <div class="dock-inner">
+      <button type="button" class="attach-btn dock-attach" id="dockAttach" aria-label="Attach a photo or file"><svg class="ico" viewBox="0 0 24 24"><path d="M20 11.5l-7.8 7.8a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8"/></svg></button>
       <textarea id="prompt" rows="1" placeholder="Ask Tempo to plan something…" enterkeyhint="send" aria-label="Message Tempo"></textarea>
       <button type="button" class="mic" id="mic" aria-label="Speak">
         <span class="mic-glow" aria-hidden="true"></span>
@@ -220,7 +227,7 @@
         <button type="button" class="ghost-btn" id="sDisconnect">Use sample data</button>
         <button type="submit" class="primary-btn">Save &amp; connect</button>
       </div>
-      <p class="fine">Tempo talks only to your own Google Apps Script. Your web app URL and app key stay on this device. <span class="ver">Version 14</span></p>
+      <p class="fine">Tempo talks only to your own Google Apps Script. Your web app URL and app key stay on this device. <span class="ver">Version 15</span></p>
     </form>
   </section>
 

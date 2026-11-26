@@ -439,16 +439,46 @@
     $('#breakInput').placeholder = f ? 'What’s it for? (optional)' : 'What feels too big?';
     if (!f) $('#breakFile').value = '';
   }
-  async function pickBreakFile(file) {
-    if (!file) return;
+  async function loadFile(file) {
+    hint('Getting your file ready…');
     try {
-      hint('Getting your file ready…');
       const f = /^image\//.test(file.type) ? await shrinkImage(file) : await readFileB64(file);
       if (f.data.length * 0.75 > MAX_FILE_MB * 1024 * 1024) throw new Error(`That file is over ${MAX_FILE_MB} MB. Try a smaller one, or a photo of the page.`);
-      setBreakFile(f);
-    } catch (e) {
-      setBreakFile(null); toast(e.message || 'Couldn’t read that file.');
+      return f;
     } finally { hint(''); }
+  }
+  async function pickBreakFile(file) {
+    if (!file) return;
+    try { setBreakFile(await loadFile(file)); }
+    catch (e) { setBreakFile(null); toast(e.message || 'Couldn’t read that file.'); }
+  }
+
+  // The same, for anything typed or said in the Ask Tempo bar (a flyer, a schedule…).
+  let dockFile = null;
+  function setDockFile(f) {
+    dockFile = f;
+    $('#dockFileChip').hidden = !f;
+    $('#dockFileName').textContent = f ? f.name : '';
+    $('#dockAttach').classList.toggle('on', !!f);
+    $('#prompt').placeholder = f ? 'What should Tempo do with it?' : 'Ask Tempo to plan something…';
+    if (!f) $('#dockFile').value = '';
+    syncMic();
+  }
+  async function pickDockFile(file) {
+    if (!file) return;
+    try { setDockFile(await loadFile(file)); }
+    catch (e) { setDockFile(null); toast(e.message || 'Couldn’t read that file.'); }
+  }
+  async function sendPrompt(raw) {
+    const text = (raw || '').trim();
+    const f = dockFile;
+    if (!f) return ask(text);
+    const msg = text
+      ? `${text}\n\n(Attached file: ${f.name})`
+      : `Here is a file (${f.name}). Look at it and add any events or tasks it calls for, then tell me what you did.`;
+    const ok = await ask(msg, f);
+    if (ok && dockFile === f) setDockFile(null);
+    return ok;
   }
   function readFileB64(file) {
     return new Promise((resolve, reject) => {
@@ -784,7 +814,7 @@
         $('#prompt').value = (finalText + interim).trim(); autoSize();
       };
       rec.onerror = (e) => { stopUI(); if (e.error === 'not-allowed' || e.error === 'service-not-allowed') fallbackDictation(); };
-      rec.onend = () => { const txt = $('#prompt').value.trim(); stopUI(); if (txt) ask(txt); };
+      rec.onend = () => { const txt = $('#prompt').value.trim(); stopUI(); if (txt) sendPrompt(txt); };
       rec.start();
       listening = true;
       $('#mic').classList.add('listening');
@@ -806,7 +836,7 @@
     clearTimeout(toast._t); toast._t = setTimeout(() => { el.hidden = true; }, 2800);
   }
   function autoSize() { const p = $('#prompt'); p.style.height = 'auto'; p.style.height = Math.min(p.scrollHeight, 120) + 'px'; }
-  function syncMic() { $('#mic').classList.toggle('has-text', !!$('#prompt').value.trim()); }
+  function syncMic() { $('#mic').classList.toggle('has-text', !!$('#prompt').value.trim() || !!dockFile); }
 
   function openSheet(name) {
     closeSheets();
@@ -968,14 +998,17 @@
 
     const prompt = $('#prompt');
     prompt.addEventListener('input', () => { autoSize(); syncMic(); });
-    prompt.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(prompt.value); } });
-    $('#composer').addEventListener('submit', (e) => { e.preventDefault(); ask(prompt.value); });
+    prompt.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendPrompt(prompt.value); } });
+    $('#composer').addEventListener('submit', (e) => { e.preventDefault(); sendPrompt(prompt.value); });
     $('#mic').addEventListener('click', () => {
       if (busy) return;
       if (listening) { stopListening(); return; }
-      if (prompt.value.trim()) { ask(prompt.value); return; }
+      if (prompt.value.trim() || dockFile) { sendPrompt(prompt.value); return; }
       startListening();
     });
+    $('#dockAttach').addEventListener('click', () => $('#dockFile').click());
+    $('#dockFile').addEventListener('change', (e) => pickDockFile(e.target.files && e.target.files[0]));
+    $('#dockFileClear').addEventListener('click', () => setDockFile(null));
 
     $('#closeReply').addEventListener('click', () => { $('#reply').hidden = true; });
     $('#openChat').addEventListener('click', () => { renderChat(); openSheet('chat'); });
