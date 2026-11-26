@@ -194,8 +194,9 @@
         { id: 'a3', title: 'Open the data sheet and pick the two columns', due: k(0), priority: 'normal', done: false, minutes: 5, parent: 'a1', notes: '' },
         { id: 'a8', title: 'Make the two graphs', due: k(0), priority: 'normal', done: false, minutes: 20, parent: 'a1', notes: '' },
         { id: 'a9', title: 'Write the results paragraph', due: k(0), priority: 'normal', done: false, minutes: 15, parent: 'a1', notes: '' },
+        { id: 'a10', title: 'Turn in permission form', due: k(0), due_time: '15:00', priority: 'normal', done: false, minutes: 5, parent: '', notes: '' },
         { id: 'a4', title: 'Email Prof. Lee about extension', due: k(-1), priority: 'normal', done: false, minutes: 10, parent: '', notes: '' },
-        { id: 'a5', title: 'Review chapters 7–9 for Bio', due: k(2), priority: 'high', done: false, minutes: 120, parent: '', notes: '' },
+        { id: 'a5', title: 'Review chapters 7–9 for Bio', due: k(2), due_time: '17:00', priority: 'high', done: false, minutes: 120, parent: '', notes: '' },
         { id: 'a6', title: 'Pay phone bill', due: k(5), priority: 'low', done: false, minutes: null, parent: '', notes: '', remind: k(5) + 'T09:00' },
         { id: 'a7', title: 'Return library books', due: '', priority: 'normal', done: false, minutes: null, parent: '', notes: '' }
       ]
@@ -614,11 +615,12 @@
 
   const topLevel = (list) => list.filter((t) => !t.parent);
   const priRank = { high: 0, normal: 1, low: 2 };
-  // Soonest due date first (overdue on top, no date last), then High,
+  // Soonest due date and time first (overdue on top, no date last), then High,
   // Medium, Low within the same day. Ties go to the earlier reminder
   // time, then the task that was added first.
   function taskOrder(a, b) {
-    const ad = a.due || '9999', bd = b.due || '9999';
+    // A due time sorts within its day; a task with no time counts as end of day.
+    const ad = a.due ? a.due + 'T' + (a.due_time || '99') : '9999', bd = b.due ? b.due + 'T' + (b.due_time || '99') : '9999';
     if (ad !== bd) return ad.localeCompare(bd);
     const pr = (priRank[a.priority] ?? 1) - (priRank[b.priority] ?? 1);
     if (pr) return pr;
@@ -632,8 +634,10 @@
     const today = dayKey(new Date());
     const tags = [];
     if (t.due) {
-      const cls = !t.done && t.due < today ? 'overdue' : t.due === today ? 'today' : '';
-      tags.push(`<span class="tag ${cls}">${cls === 'overdue' ? 'Overdue · ' : ''}${esc(relDay(t.due))}</span>`);
+      const late = !t.done && (t.due < today || (t.due === today && t.due_time && parse(t.due + 'T' + t.due_time) < new Date()));
+      const cls = late ? 'overdue' : t.due === today ? 'today' : '';
+      const at = t.due_time ? ' ' + timeFull(parse(t.due + 'T' + t.due_time)) : '';
+      tags.push(`<span class="tag ${cls}">${late && t.due < today ? 'Overdue · ' : ''}${esc(relDay(t.due))}${esc(at)}</span>`);
     }
     if (t.remind && !t.done && !t.reminded) {
       const r = parse(t.remind);
@@ -768,6 +772,7 @@
     state.editing = id;
     $('#tTitle').value = t.title;
     $('#tDue').value = t.due || '';
+    $('#tDueTime').value = t.due_time || '';
     $('#tRemind').value = t.remind || '';
     $('#tMinutes').value = t.minutes || '';
     $('#tNotes').value = t.notes || '';
@@ -783,6 +788,7 @@
       id: t.id,
       title: $('#tTitle').value.trim() || t.title,
       due: $('#tDue').value || '',
+      due_time: ($('#tDueTime').value || '').slice(0, 5),
       remind: ($('#tRemind').value || '').slice(0, 16),
       minutes: $('#tMinutes').value ? Number($('#tMinutes').value) : '',
       notes: $('#tNotes').value,
@@ -790,6 +796,7 @@
     };
     if (upd.remind !== (t.remind || '')) t.reminded = '';
     if (upd.remind && !upd.due) upd.due = upd.remind.slice(0, 10);
+    if (!upd.due) upd.due_time = '';
     Object.assign(t, upd);
     closeSheets(); render();
     if (isConnected()) { try { await api('updateTodo', { todo: upd }); render(); } catch (e) { toast(e.message); } }

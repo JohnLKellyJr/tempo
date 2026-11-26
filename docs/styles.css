@@ -347,7 +347,7 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 /* Reminders */
 .tag.remind { color: var(--accent); background: var(--accent-soft); }
 .tag .bell { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.field input[type="datetime-local"] { min-height: 24px; }
+.field input[type="datetime-local"], .field input[type="time"] { min-height: 24px; }
 .reminders .rem-text { margin: 0; font-size: 14px; color: var(--text-2); }
 .primary-btn.small { padding: 10px 12px; border-radius: 12px; font-size: 15px; }
 .ghost-btn.small { padding: 8px 12px; border-radius: 12px; font-size: 14px; background: var(--surface); }
