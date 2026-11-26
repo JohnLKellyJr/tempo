@@ -781,10 +781,14 @@
     $('#replyChips').innerHTML = (changes || []).map((c) =>
       `<span class="chip">${CHIP_ICONS[c.type] || ''}<span>${esc(cap(c.verb))} <b>${esc(c.title)}</b>${c.when ? ' · ' + esc(c.type === 'todo' && /^\d{4}-/.test(c.when) ? relDay(c.when) : c.when) : ''}</span></span>`).join('');
     box.hidden = false;
+    $('#replyBody').scrollTop = 0;
     box.style.animation = 'none'; void box.offsetWidth; box.style.animation = '';
     clearTimeout(showReply._t);
-    if (!isErr) showReply._t = setTimeout(() => { box.hidden = true; }, 12000);
+    // Short replies fade on their own. Long ones stay until you close them.
+    const long = $('#replyBody').scrollHeight > $('#replyBody').clientHeight + 4;
+    if (!isErr && !long) showReply._t = setTimeout(hideReply, 12000);
   }
+  function hideReply() { clearTimeout(showReply._t); $('#reply').hidden = true; }
   const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : '');
 
   function renderChat() {
@@ -1010,7 +1014,22 @@
     $('#dockFile').addEventListener('change', (e) => pickDockFile(e.target.files && e.target.files[0]));
     $('#dockFileClear').addEventListener('click', () => setDockFile(null));
 
-    $('#closeReply').addEventListener('click', () => { $('#reply').hidden = true; });
+    $('#closeReply').addEventListener('click', hideReply);
+    // Reading it? Don't let it vanish mid-sentence.
+    $('#reply').addEventListener('touchstart', () => clearTimeout(showReply._t), { passive: true });
+    $('#reply').addEventListener('wheel', () => clearTimeout(showReply._t), { passive: true });
+    // Tap anywhere outside the card to close it.
+    document.addEventListener('pointerdown', (e) => {
+      const box = $('#reply');
+      if (!box.hidden && !box.contains(e.target) && !e.target.closest('#composer')) hideReply();
+    });
+    // Swipe down on the card's top bar to close it.
+    let swipeY = null;
+    $('.reply-head').addEventListener('touchstart', (e) => { swipeY = e.touches[0].clientY; }, { passive: true });
+    $('.reply-head').addEventListener('touchend', (e) => {
+      if (swipeY != null && e.changedTouches[0].clientY - swipeY > 40) hideReply();
+      swipeY = null;
+    }, { passive: true });
     $('#openChat').addEventListener('click', () => { renderChat(); openSheet('chat'); });
     $('#clearChat').addEventListener('click', () => { state.history = []; store.set('history', []); renderChat(); });
 
