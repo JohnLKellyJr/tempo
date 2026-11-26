@@ -167,6 +167,7 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .tag.overdue { color: var(--danger); background: rgba(229, 72, 77, .1); }
 .tag.today { color: var(--accent); background: var(--accent-soft); }
 .tag.high { color: var(--accent-2); background: rgba(var(--a2), .12); }
+.tag.low { color: var(--text-3); }
 .empty-note { color: var(--text-3); font-size: 15px; padding: 18px 4px; text-align: center; }
 
 .quick-add { display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 14px; border-radius: 18px; margin-bottom: 8px; }
